@@ -1,3 +1,25 @@
+📥 Hướng dẫn tải project về máy
+
+Bước 1: Mở Terminal hoặc CMD
+
+Mở thư mục mà bạn muốn lưu project, sau đó mở Terminal hoặc CMD tại thư mục đó.
+
+Bước 2: Tải project từ GitHub
+
+Chạy lệnh sau để tải repository MOBILE-APP về máy:
+
+```bash
+git clone https://github.com/hien281/MOBILE-APP.git
+```
+
+Bước 3: Di chuyển vào thư mục project
+
+Sau khi tải hoàn tất, chạy lệnh:
+
+```bash
+cd MOBILE-APP
+```
+
 # 📱 MOBILE_APP – Quy tắc làm việc & Git Workflow
 
 ## 1. Quy tắc làm việc chung
