@@ -17,7 +17,10 @@ Bước 3: Di chuyển vào thư mục project
 Sau khi tải hoàn tất, chạy lệnh:
 
 ```bash
-cd MOBILE-APP
+cd (tên thư mục)
+npm install
+yarn install
+flutter pub get
 ```
 
 # 📱 MOBILE_APP – Quy tắc làm việc & Git Workflow
