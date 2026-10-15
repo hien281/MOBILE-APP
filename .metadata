@@ -6,6 +6,8 @@
 version:
   revision: "882e0b7d56e74a3f710470177027ae101e1f358e"
   channel: "master"
+  revision: "abaf9c523780a608bd46686fd5e53740a07077f8"
+  channel: "stable"
 
 project_type: app
 
@@ -33,6 +35,11 @@ migration:
     - platform: windows
       create_revision: 882e0b7d56e74a3f710470177027ae101e1f358e
       base_revision: 882e0b7d56e74a3f710470177027ae101e1f358e
+      create_revision: abaf9c523780a608bd46686fd5e53740a07077f8
+      base_revision: abaf9c523780a608bd46686fd5e53740a07077f8
+    - platform: android
+      create_revision: abaf9c523780a608bd46686fd5e53740a07077f8
+      base_revision: abaf9c523780a608bd46686fd5e53740a07077f8
 
   # User provided section
 

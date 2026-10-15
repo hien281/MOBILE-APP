@@ -14,7 +14,7 @@ Chạy lệnh sau để tải repository MOBILE-APP về máy:
 git clone https://github.com/hien281/MOBILE-APP.git ten-thu-muc
 ```
 
-Bước 3: Di chuyển vào thư mục project
+Bước 4: Di chuyển vào thư mục project
 
 Sau khi tải hoàn tất, chạy lệnh:
 
