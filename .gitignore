@@ -46,3 +46,10 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Backend
+backend/.env
+backend/node_modules/
+
+# Generated Flutter files
+**/ephemeral/
