@@ -1,23 +1,28 @@
 # 📥 Hướng dẫn tải project về máy
 
-Bước 1: Mở Terminal hoặc CMD
+Bước 1: Tạo thư mục và đặt tên theo ý thích
+
+Bước 2: Mở Terminal hoặc CMD
 
 Mở thư mục mà bạn muốn lưu project, sau đó mở Terminal hoặc CMD tại thư mục đó.
 
-Bước 2: Tải project từ GitHub
+Bước 3: Tải project từ GitHub
 
 Chạy lệnh sau để tải repository MOBILE-APP về máy:
 
 ```bash
-git clone https://github.com/hien281/MOBILE-APP.git
+git clone https://github.com/hien281/MOBILE-APP.git ten-thu-muc
 ```
 
-Bước 3: Di chuyển vào thư mục project
+Bước 4: Di chuyển vào thư mục project
 
 Sau khi tải hoàn tất, chạy lệnh:
 
 ```bash
-cd MOBILE-APP
+cd ten-thu-muc
+npm install
+yarn install
+flutter pub get
 ```
 
 # 📱 MOBILE_APP – Quy tắc làm việc & Git Workflow

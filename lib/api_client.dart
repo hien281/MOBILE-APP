@@ -13,6 +13,13 @@ class ApiClient {
     return 'http://10.0.2.2:3000/api';
   }
 
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+class ApiClient {
+  // Địa chỉ API đã deploy lên Vercel
+  static const String baseUrl = 'https://mobile-app-nine-lac.vercel.app/api';
+
   static Future<Map<String, dynamic>> login({
     required String email,
     required String password,
@@ -34,4 +41,5 @@ class ApiClient {
 
     throw Exception(data['message'] ?? 'Đăng nhập thất bại.');
   }
+}
 }
