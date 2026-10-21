@@ -2,7 +2,10 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class ApiClient {
-  static const String baseUrl = 'https://mobile-app-nine-lac.vercel.app/api';
+  static const String baseUrl = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'https://mobile-app-nine-lac.vercel.app/api',
+);
 
   static Future<Map<String, dynamic>> login({
     required String email,

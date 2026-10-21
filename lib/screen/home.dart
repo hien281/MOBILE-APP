@@ -1,6 +1,6 @@
-
 import 'package:flutter/material.dart';
 import '../api_client.dart';
+import 'booking.dart';
 
 const Color oliveGreen = Color(0xFF1E147B);
 const Color pageBackground = Color(0xFFF6F7EB);
@@ -41,7 +41,12 @@ class SportsField {
 }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final String accessToken;
+
+  const HomeScreen({
+    super.key,
+    required this.accessToken,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -888,10 +893,29 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     FilledButton(
-                      onPressed: () {
-                        _showComingSoon(
-                          'Đặt sân ${field.name}',
+                      onPressed: () async {
+                        final booked = await Navigator.push<bool>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => BookingScreen(
+                              fieldId: field.id,
+                              fieldName: field.name,
+                              price: field.price,
+                              baseUrl: ApiClient.baseUrl,
+                              accessToken: widget.accessToken,
+                            ),
+                          ),
                         );
+
+                        if (!mounted) return;
+
+                        if (booked == true) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Đặt sân thành công!'),
+                            ),
+                          );
+                        }
                       },
                       style: FilledButton.styleFrom(
                         backgroundColor: oliveGreen,
