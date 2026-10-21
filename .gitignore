@@ -49,7 +49,9 @@ app.*.map.json
 
 # Backend
 backend/.env
+backend/.env.*
 backend/node_modules/
+!backend/.env.example
 
 # Generated Flutter files
 **/ephemeral/

@@ -1,24 +1,34 @@
+const fs = require('fs');
+
 const {
   initializeApp,
   getApps,
   cert,
 } = require('firebase-admin/app');
 
-const {
-  getFirestore,
-} = require('firebase-admin/firestore');
+const { getFirestore } = require('firebase-admin/firestore');
 
-const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
+function loadServiceAccount() {
+  const json = process.env.FIREBASE_SERVICE_ACCOUNT;
 
-if (!serviceAccountJson) {
-  throw new Error('Missing FIREBASE_SERVICE_ACCOUNT');
+  if (json) {
+    return JSON.parse(json);
+  }
+
+  const filePath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
+
+  if (filePath) {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  }
+
+  throw new Error(
+    'Missing FIREBASE_SERVICE_ACCOUNT or FIREBASE_SERVICE_ACCOUNT_PATH'
+  );
 }
-
-const serviceAccount = JSON.parse(serviceAccountJson);
 
 if (getApps().length === 0) {
   initializeApp({
-    credential: cert(serviceAccount),
+    credential: cert(loadServiceAccount()),
   });
 }
 

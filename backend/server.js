@@ -1,4 +1,16 @@
+require('dotenv').config();
+
+const express = require('express');
+const cors = require('cors');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { db } = require('./firebase');
+
+const app = express();
+
+app.use(cors());
+app.use(express.json());
+
 app.get('/api/firebase-health', async (req, res) => {
   try {
     await db.collection('fields').limit(1).get();
@@ -16,18 +28,6 @@ app.get('/api/firebase-health', async (req, res) => {
     });
   }
 });
-
-require('dotenv').config();
-
-const express = require('express');
-const cors = require('cors');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-
-const app = express();
-
-app.use(cors());
-app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET;
