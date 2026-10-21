@@ -11,6 +11,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const bookingRoutes = require('./bookingRoutes');
+app.use('/api', bookingRoutes);
+
 app.get('/api/firebase-health', async (req, res) => {
   try {
     await db.collection('fields').limit(1).get();
@@ -103,103 +106,86 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// API DANH SÁCH SÂN THỂ THAO
-const sportsFields = [
-  {
-    id: 'field_01',
-    name: 'Sân bóng đá Sport Center',
-    sport: 'Bóng đá',
-    address: 'Quận 10, TP. Hồ Chí Minh',
-    price: 350000,
-    rating: 4.9,
-    imageUrl:
-      'https://images.unsplash.com/photo-1522778119026-d647f0596c20',
-    isPopular: true,
-  },
-  {
-    id: 'field_02',
-    name: 'Badminton Green Court',
-    sport: 'Cầu lông',
-    address: 'Quận 3, TP. Hồ Chí Minh',
-    price: 120000,
-    rating: 4.8,
-    imageUrl:
-      'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea',
-    isPopular: true,
-  },
-  {
-    id: 'field_03',
-    name: 'Tennis Riverside',
-    sport: 'Tennis',
-    address: 'TP. Thủ Đức, TP. Hồ Chí Minh',
-    price: 200000,
-    rating: 4.7,
-    imageUrl:
-      'https://images.unsplash.com/photo-1622279457486-62dcc4a431d6',
-    isPopular: false,
-  },
-  {
-    id: 'field_04',
-    name: 'Basketball Arena',
-    sport: 'Bóng rổ',
-    address: 'Quận 7, TP. Hồ Chí Minh',
-    price: 180000,
-    rating: 4.8,
-    imageUrl:
-      'https://images.unsplash.com/photo-1546519638-68e109498ffc',
-    isPopular: false,
-  },
-];
 
-// GET /api/fields
-app.get('/api/fields', (req, res) => {
-  const { sport, search } = req.query;
+// GET /api/fields - Lấy danh sách sân từ Firestore
+app.get('/api/fields', async (req, res) => {
+  try {
+    const { sport, search } = req.query;
 
-  let result = [...sportsFields];
+    const snapshot = await db.collection('fields').get();
 
-  // Lọc theo môn thể thao
-  if (typeof sport === 'string' && sport !== 'Tất cả') {
-    result = result.filter(
-      (field) => field.sport.toLowerCase() === sport.toLowerCase()
-    );
-  }
+    let result = snapshot.docs.map((doc) => ({
+      ...doc.data(),
+      id: doc.id,
+    }));
 
-  // Tìm kiếm sân
-  if (typeof search === 'string' && search.trim()) {
-    const keyword = search.trim().toLowerCase();
+    // Lọc theo môn thể thao
+    if (typeof sport === 'string' && sport !== 'Tất cả') {
+      result = result.filter(
+        (field) =>
+          typeof field.sport === 'string' &&
+          field.sport.toLowerCase() === sport.toLowerCase()
+      );
+    }
 
-    result = result.filter(
-      (field) =>
-        field.name.toLowerCase().includes(keyword) ||
-        field.address.toLowerCase().includes(keyword) ||
-        field.sport.toLowerCase().includes(keyword)
-    );
-  }
+    // Tìm kiếm sân
+    if (typeof search === 'string' && search.trim()) {
+      const keyword = search.trim().toLowerCase();
 
-  res.status(200).json({
-    success: true,
-    count: result.length,
-    fields: result,
-  });
-});
+      result = result.filter((field) =>
+        [field.name, field.address, field.sport].some(
+          (value) =>
+            typeof value === 'string' &&
+            value.toLowerCase().includes(keyword)
+        )
+      );
+    }
 
-// GET /api/fields/:id
-app.get('/api/fields/:id', (req, res) => {
-  const field = sportsFields.find(
-    (item) => item.id === req.params.id
-  );
+    return res.status(200).json({
+      success: true,
+      count: result.length,
+      fields: result,
+    });
+  } catch (error) {
+    console.error('Error fetching fields:', error);
 
-  if (!field) {
-    return res.status(404).json({
+    return res.status(500).json({
       success: false,
-      message: 'Không tìm thấy sân thể thao.',
+      message: 'Không thể tải danh sách sân.',
     });
   }
+});
 
-  res.status(200).json({
-    success: true,
-    field,
-  });
+// GET /api/fields/:id - Chi tiết sân
+app.get('/api/fields/:id', async (req, res) => {
+  try {
+    const doc = await db
+      .collection('fields')
+      .doc(req.params.id)
+      .get();
+
+    if (!doc.exists) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy sân thể thao.',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      field: {
+        ...doc.data(),
+        id: doc.id,
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching field:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Không thể tải thông tin sân.',
+    });
+  }
 });
 
 if (require.main === module) {
