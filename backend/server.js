@@ -1,3 +1,22 @@
+const { db } = require('./firebase');
+app.get('/api/firebase-health', async (req, res) => {
+  try {
+    await db.collection('fields').limit(1).get();
+
+    res.json({
+      success: true,
+      message: 'Firebase Firestore connected!',
+    });
+  } catch (error) {
+    console.error('Firebase error:', error);
+
+    res.status(500).json({
+      success: false,
+      message: 'Firebase connection failed',
+    });
+  }
+});
+
 require('dotenv').config();
 
 const express = require('express');
