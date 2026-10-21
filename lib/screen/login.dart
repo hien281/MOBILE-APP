@@ -40,10 +40,17 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       final user = result['user'] as Map<String, dynamic>;
+      final accessToken = result['accessToken'] as String;
+
+      if (accessToken.isEmpty) {
+        throw Exception('Server không trả về token đăng nhập.');
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Xin chào ${user['email'] ?? _emailController.text.trim()}!'),
+          content: Text(
+            'Xin chào ${user['email'] ?? _emailController.text.trim()}!',
+          ),
         ),
       );
 
@@ -51,7 +58,9 @@ class _LoginScreenState extends State<LoginScreen> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (context) => const HomeScreen(),
+          builder: (context) => HomeScreen(
+            accessToken: accessToken,
+          ),
         ),
       );
     } catch (error) {
