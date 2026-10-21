@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'screen/login.dart';
 
 void main() {
@@ -10,16 +11,30 @@ class SportsBookingApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const Color primary = Color(0xFF1E147B);
+    const Color secondary = Color(0xFFC86FC9);
+    const Color background = Color(0xFFF6F7EB);
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Sports Booking',
+      title: 'SPORTY',
+
       theme: ThemeData(
         useMaterial3: true,
-        fontFamily: 'Roboto',
+
+        scaffoldBackgroundColor: background,
+
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF668D13),
+          seedColor: primary,
+          primary: primary,
+          secondary: secondary,
+          surface: background,
         ),
+
+        // Font mặc định cho toàn bộ ứng dụng: Inter
+        fontFamily: GoogleFonts.inter().fontFamily,
       ),
+
       home: const LoginScreen(),
     );
   }
