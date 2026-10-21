@@ -1,19 +1,27 @@
-const admin = require('firebase-admin');
+const {
+  initializeApp,
+  getApps,
+  cert,
+} = require('firebase-admin/app');
 
-if (!admin.apps.length) {
-  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
+const {
+  getFirestore,
+} = require('firebase-admin/firestore');
 
-  if (!serviceAccountJson) {
-    throw new Error('Missing FIREBASE_SERVICE_ACCOUNT');
-  }
+const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
 
-  const serviceAccount = JSON.parse(serviceAccountJson);
+if (!serviceAccountJson) {
+  throw new Error('Missing FIREBASE_SERVICE_ACCOUNT');
+}
 
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+const serviceAccount = JSON.parse(serviceAccountJson);
+
+if (getApps().length === 0) {
+  initializeApp({
+    credential: cert(serviceAccount),
   });
 }
 
-const db = admin.firestore();
+const db = getFirestore();
 
-module.exports = { admin, db };
+module.exports = { db };
