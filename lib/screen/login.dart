@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../api_client.dart';
+import 'home.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -24,6 +25,7 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -40,11 +42,18 @@ class _LoginScreenState extends State<LoginScreen> {
       final user = result['user'] as Map<String, dynamic>;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Xin chào ${user['email']}!')),
+        SnackBar(
+          content: Text('Xin chào ${user['email'] ?? _emailController.text.trim()}!'),
+        ),
       );
 
-      // TODO: Lưu token an toàn và điều hướng sang trang chủ.
-      // TODO: Kiểm tra role ở backend trước khi cho phép truy cập admin.
+      // Đăng nhập thành công -> chuyển sang trang chủ.
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const HomeScreen(),
+        ),
+      );
     } catch (error) {
       if (!mounted) return;
 
@@ -62,10 +71,11 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFEAF8F3),
+      backgroundColor: const Color(0xFFF6F7EB),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -86,14 +96,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       children: [
                         Icon(
                           Icons.sports_tennis,
-                          color: Color(0xFF668D13),
+                          color: Color(0xFF1E147B),
                           size: 34,
                         ),
                         SizedBox(width: 8),
                         Text(
                           'Sporty',
                           style: TextStyle(
-                            color: Color(0xFF668D13),
+                            color: Color(0xFF1E147B),
                             fontSize: 27,
                             fontWeight: FontWeight.bold,
                             fontStyle: FontStyle.italic,
@@ -105,13 +115,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     Container(
                       height: 180,
                       decoration: BoxDecoration(
-                        color: const Color(0xFFD9F0DF),
+                        color: const Color(0xFFDFDCF9),
                         borderRadius: BorderRadius.circular(24),
                       ),
                       child: const Icon(
                         Icons.sports_tennis,
                         size: 110,
-                        color: Color(0xFF668D13),
+                        color: Color(0xFF1E147B),
                       ),
                     ),
                     const SizedBox(height: 28),
@@ -121,7 +131,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF202720),
+                        color: Color(0xFF1E147B),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -198,7 +208,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       children: [
                         Checkbox(
                           value: _rememberMe,
-                          activeColor: const Color(0xFF668D13),
+                          activeColor: const Color(0xFF1E147B),
                           onChanged: (value) {
                             setState(() => _rememberMe = value ?? false);
                           },
@@ -232,7 +242,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: ElevatedButton(
                         onPressed: _isLoading ? null : _login,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF668D13),
+                          backgroundColor: const Color(0xFF1E147B),
                           foregroundColor: Colors.white,
                           elevation: 0,
                           shape: RoundedRectangleBorder(
@@ -294,7 +304,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: const Text(
                         "Don't have an account? Sign up",
                         style: TextStyle(
-                          color: Color(0xFF668D13),
+                          color: Color(0xFF1E147B),
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -317,7 +327,7 @@ class _LoginScreenState extends State<LoginScreen> {
       hintText: hint,
       prefixIcon: Icon(icon, size: 20),
       filled: true,
-      fillColor: const Color(0xFFDDECE7),
+      fillColor: const Color(0xFFDFDCF9),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide.none,
@@ -329,7 +339,7 @@ class _LoginScreenState extends State<LoginScreen> {
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(
-          color: Color(0xFF668D13),
+          color: Color(0xFF1E147B),
           width: 1.5,
         ),
       ),
