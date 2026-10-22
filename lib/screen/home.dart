@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../api_client.dart';
+import '../location_service.dart';
 import 'booking.dart';
 
 const Color oliveGreen = Color(0xFF1E147B);
@@ -74,10 +75,45 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loadingFields = true;
   String? _fieldsError;
 
+  String _locationLabel = 'Đang lấy vị trí...';
+  bool _loadingLocation = false;
+
   @override
   void initState() {
     super.initState();
     _loadFields();
+    _loadLocation();
+  }
+
+  Future<void> _loadLocation() async {
+    if (_loadingLocation) return;
+    setState(() {
+      _loadingLocation = true;
+      _locationLabel = 'Đang lấy vị trí...';
+    });
+
+    try {
+      final position = await LocationService.getCurrentLocation();
+      if (!mounted) return;
+      setState(() {
+        _locationLabel =
+            '${position.latitude.toStringAsFixed(5)}, '
+            '${position.longitude.toStringAsFixed(5)}';
+        _loadingLocation = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadingLocation = false;
+        _locationLabel = 'Chạm để thử lại vị trí';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _loadFields() async {
@@ -239,25 +275,37 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 3),
-              Row(
-                children: [
-                  const Icon(
-                    Icons.location_on_outlined,
-                    color: oliveGreen,
-                    size: 15,
-                  ),
-                  const SizedBox(width: 3),
-                  Flexible(
-                    child: Text(
-                      'TP. Hồ Chí Minh',
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: 12,
+              InkWell(
+                onTap: _loadingLocation ? null : _loadLocation,
+                borderRadius: BorderRadius.circular(8),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.location_on_outlined,
+                      color: oliveGreen,
+                      size: 15,
+                    ),
+                    const SizedBox(width: 3),
+                    Flexible(
+                      child: Text(
+                        _locationLabel,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                    if (_loadingLocation) ...[
+                      const SizedBox(width: 6),
+                      const SizedBox(
+                        width: 11,
+                        height: 11,
+                        child: CircularProgressIndicator(strokeWidth: 1.5),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ],
           ),
