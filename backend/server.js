@@ -13,6 +13,8 @@ app.use(express.json());
 
 const bookingRoutes = require('./bookingRoutes');
 app.use('/api', bookingRoutes);
+const locationRoutes = require('./locationRoutes');
+app.use('/api', locationRoutes);
 
 app.get('/api/firebase-health', async (req, res) => {
   try {
