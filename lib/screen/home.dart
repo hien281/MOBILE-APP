@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import '../api_client.dart';
 import '../location_service.dart';
 import 'booking.dart';
@@ -95,10 +98,40 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final position = await LocationService.getCurrentLocation();
       if (!mounted) return;
+
+      final coordinates =
+          '${position.latitude.toStringAsFixed(5)}, '
+          '${position.longitude.toStringAsFixed(5)}';
+
+      // Show coordinates immediately while resolving the area name.
+      setState(() => _locationLabel = coordinates);
+
+      String label = coordinates;
+      try {
+        final uri = Uri.parse('${ApiClient.baseUrl}/location/reverse').replace(
+          queryParameters: {
+            'lat': position.latitude.toString(),
+            'lon': position.longitude.toString(),
+          },
+        );
+        final response = await http.get(uri).timeout(const Duration(seconds: 12));
+        if (response.statusCode == 200) {
+          final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+          if (decoded is Map<String, dynamic> && decoded['success'] == true) {
+            final name = decoded['name'];
+            if (name is String && name.trim().isNotEmpty) {
+              label = name.trim();
+            }
+          }
+        }
+      } catch (error) {
+        // Reverse geocoding is optional; retain the GPS coordinates on failure.
+        debugPrint('Reverse geocoding unavailable: $error');
+      }
+
+      if (!mounted) return;
       setState(() {
-        _locationLabel =
-            '${position.latitude.toStringAsFixed(5)}, '
-            '${position.longitude.toStringAsFixed(5)}';
+        _locationLabel = label;
         _loadingLocation = false;
       });
     } catch (error) {
