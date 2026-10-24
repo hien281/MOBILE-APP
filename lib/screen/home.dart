@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:geolocator/geolocator.dart';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -21,6 +22,14 @@ class SportsField {
   final double rating;
   final String imageUrl;
   final bool isPopular;
+  final double? latitude;
+  final double? longitude;
+
+  static double? _coordinate(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
 
   factory SportsField.fromJson(Map<String, dynamic> json) => SportsField(
     id: json['id'].toString(),
@@ -31,6 +40,8 @@ class SportsField {
     rating: (json['rating'] as num).toDouble(),
     imageUrl: json['imageUrl'].toString(),
     isPopular: json['isPopular'] == true,
+    latitude: _coordinate(json['latitude']),
+    longitude: _coordinate(json['longitude']),
   );
 
   const SportsField({
@@ -42,6 +53,8 @@ class SportsField {
     required this.rating,
     required this.imageUrl,
     this.isPopular = false,
+    this.latitude,
+    this.longitude,
   });
 }
 
@@ -81,6 +94,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String _locationLabel = 'Đang lấy vị trí...';
   bool _loadingLocation = false;
+  Position? _currentPosition;
+  bool _sortByDistance = false;
 
   @override
   void initState() {
@@ -104,8 +119,11 @@ class _HomeScreenState extends State<HomeScreen> {
           '${position.latitude.toStringAsFixed(5)}, '
           '${position.longitude.toStringAsFixed(5)}';
 
-      // Show coordinates immediately while resolving the area name.
-      setState(() => _locationLabel = coordinates);
+      // Lưu GPS ngay để tính khoảng cách, không cần chờ reverse geocoding.
+      setState(() {
+        _currentPosition = position;
+        _locationLabel = coordinates;
+      });
 
       String label = coordinates;
       try {
@@ -139,6 +157,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       setState(() {
         _loadingLocation = false;
+        _currentPosition = null;
         _locationLabel = 'Chạm để thử lại vị trí';
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -153,17 +172,60 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadFields() async {
     setState(() { _loadingFields = true; _fieldsError = null; });
     try {
-      final data = await ApiClient.getFields();
+      // Fetch directly from the active API to avoid stale getFields() URLs.
+      final uri = Uri.parse('${ApiClient.baseUrl}/fields').replace(
+        queryParameters: {'_fresh': DateTime.now().millisecondsSinceEpoch.toString()},
+      );
+      debugPrint('SPORTY fields API: $uri');
+      final response = await http.get(
+        uri,
+        headers: {'Cache-Control': 'no-cache', 'Pragma': 'no-cache'},
+      ).timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) {
+        throw Exception('Không tải được danh sách sân (HTTP ${response.statusCode}).');
+      }
+      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+      if (decoded is! Map || decoded['fields'] is! List) {
+        throw Exception('Dữ liệu sân từ API không hợp lệ.');
+      }
+      for (final item in decoded['fields'] as List) {
+        if (item is Map) {
+          debugPrint('SPORTY FIELD ${item['id']}: lat=${item['latitude']} lon=${item['longitude']}');
+        }
+      }
+      final fields = (decoded['fields'] as List).map((item) {
+        if (item is! Map) throw const FormatException('Dữ liệu sân lỗi');
+        return SportsField.fromJson(Map<String, dynamic>.from(item));
+      }).toList();
       if (!mounted) return;
-      setState(() { _fields = data.map(SportsField.fromJson).toList(); _loadingFields = false; });
+      setState(() { _fields = fields; _loadingFields = false; });
     } catch (error) {
       if (!mounted) return;
       setState(() { _fieldsError = error.toString().replaceFirst('Exception: ', ''); _loadingFields = false; });
     }
   }
 
+  double? _distanceKm(SportsField field) {
+    final position = _currentPosition;
+    final lat = field.latitude;
+    final lon = field.longitude;
+    if (position == null || lat == null || lon == null ||
+        !lat.isFinite || !lon.isFinite ||
+        lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      return null;
+    }
+    return Geolocator.distanceBetween(
+      position.latitude, position.longitude, lat, lon,
+    ) / 1000;
+  }
+
+  String _distanceLabel(double km) {
+    if (km < 1) return '${(km * 1000).round()} m';
+    return '${km.toStringAsFixed(1).replaceAll('.', ',')} km';
+  }
+
   List<SportsField> get _filteredFields {
-    return _fields.where((field) {
+    final result = _fields.where((field) {
       final matchesSport = _selectedSport == 'Tất cả' ||
           field.sport == _selectedSport;
 
@@ -177,6 +239,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
       return matchesSport && matchesSearch && matchesTab;
     }).toList();
+    if (_sortByDistance && _currentPosition != null) {
+      result.sort((a, b) {
+        final da = _distanceKm(a);
+        final db = _distanceKm(b);
+        if (da == null && db == null) return 0;
+        if (da == null) return 1;
+        if (db == null) return -1;
+        return da.compareTo(db);
+      });
+    }
+    return result;
   }
 
   @override
@@ -677,6 +750,19 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
+        if (_currentPosition != null) ...[
+          TextButton.icon(
+            onPressed: () => setState(() => _sortByDistance = !_sortByDistance),
+            icon: Icon(_sortByDistance ? Icons.check_circle : Icons.near_me_outlined, size: 16),
+            label: Text(_sortByDistance ? 'Gần nhất ✓' : 'Gần nhất'),
+            style: TextButton.styleFrom(
+              foregroundColor: oliveGreen,
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
         Text(
           '${_filteredFields.length} sân',
           style: const TextStyle(
@@ -971,6 +1057,29 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 7),
+                Builder(builder: (context) {
+                  final distance = _distanceKm(field);
+                  final hasCoordinates = field.latitude != null && field.longitude != null;
+                  final message = distance != null
+                      ? 'Cách bạn ${_distanceLabel(distance)}'
+                      : _loadingLocation
+                          ? 'Đang xác định khoảng cách...'
+                          : _currentPosition == null
+                              ? 'Chưa có vị trí của bạn · Chạm vị trí phía trên để thử lại'
+                              : !hasCoordinates
+                                  ? 'Sân chưa có tọa độ từ API'
+                                  : 'Tọa độ sân không hợp lệ';
+                  return Row(children: [
+                    Icon(Icons.near_me_outlined, size: 15,
+                      color: distance == null ? textSecondary : oliveGreen),
+                    const SizedBox(width: 5),
+                    Expanded(child: Text(message,
+                      maxLines: 2,
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                        color: distance == null ? textSecondary : oliveGreen))),
+                  ]);
+                }),
                 const SizedBox(height: 15),
                 const Divider(height: 1, color: Color(0xFFF0F1EC)),
                 const SizedBox(height: 13),
