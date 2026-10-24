@@ -7,25 +7,19 @@ class ApiClient {
   defaultValue: 'https://mobile-app-nine-lac.vercel.app/api',
 );
 
-  static Future<List<Map<String, dynamic>>> getFields() async {
-  final response = await http
-      .get(Uri.parse('$baseUrl/fields'))
-      .timeout(const Duration(seconds: 15));
+    static Future<List<Map<String, dynamic>>> getFields() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/fields'),
+    ).timeout(const Duration(seconds: 15));
 
-  if (response.statusCode != 200) {
-    throw Exception(
-      'Không tải được danh sách sân (HTTP ${response.statusCode})',
-    );
-  }
+    if (response.statusCode != 200) {
+      throw Exception('Không tải được danh sách sân');
+    }
 
-  final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+    final data = jsonDecode(utf8.decode(response.bodyBytes));
 
-  if (decoded is! Map || decoded['fields'] is! List) {
-    throw Exception('Dữ liệu sân không hợp lệ');
-  }
-
-  return (decoded['fields'] as List)
-      .map((item) => Map<String, dynamic>.from(item as Map))
-      .toList();
+    return (data['fields'] as List)
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
   }
 }
