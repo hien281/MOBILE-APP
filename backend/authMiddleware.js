@@ -1,6 +1,6 @@
-const jwt = require('jsonwebtoken');
+const { getAuth } = require('firebase-admin/auth');
 
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
 
   if (
@@ -18,42 +18,23 @@ function requireAuth(req, res, next) {
   if (!token) {
     return res.status(401).json({
       success: false,
-      message: 'Token đăng nhập không hợp lệ.',
-    });
-  }
-
-  if (!process.env.JWT_SECRET) {
-    return res.status(500).json({
-      success: false,
-      message: 'Server chưa cấu hình JWT_SECRET.',
+      message: 'Token không hợp lệ.',
     });
   }
 
   try {
-    const payload = jwt.verify(
-      token,
-      process.env.JWT_SECRET,
-      { algorithms: ['HS256'] }
-    );
-
-    if (
-      !payload ||
-      typeof payload.sub !== 'string' ||
-      !payload.sub
-    ) {
-      return res.status(401).json({
-        success: false,
-        message: 'Token không hợp lệ.',
-      });
-    }
+    const decoded = await getAuth().verifyIdToken(token);
 
     req.user = {
-      id: payload.sub,
-      role: payload.role,
+      id: decoded.uid,
+      email: decoded.email ?? null,
+      role: 'customer',
     };
 
-    next();
+    return next();
   } catch (error) {
+    console.error('Firebase authentication failed:', error.code);
+
     return res.status(401).json({
       success: false,
       message: 'Phiên đăng nhập hết hạn hoặc không hợp lệ.',

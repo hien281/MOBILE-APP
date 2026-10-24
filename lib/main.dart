@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'firebase_options.dart';
 import 'screen/login.dart';
+import 'screen/home.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const SportsBookingApp());
 }
 
@@ -11,31 +17,32 @@ class SportsBookingApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const Color primary = Color(0xFF1E147B);
-    const Color secondary = Color(0xFFC86FC9);
-    const Color background = Color(0xFFF6F7EB);
-
+    const primary = Color(0xFF1E147B);
+    const secondary = Color(0xFFC86FC9);
+    const background = Color(0xFFF6F7EB);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'SPORTY',
-
       theme: ThemeData(
         useMaterial3: true,
-
         scaffoldBackgroundColor: background,
-
         colorScheme: ColorScheme.fromSeed(
-          seedColor: primary,
-          primary: primary,
-          secondary: secondary,
-          surface: background,
+          seedColor: primary, primary: primary,
+          secondary: secondary, surface: background,
         ),
-
-        // Font mặc định cho toàn bộ ứng dụng: Inter
         fontFamily: GoogleFonts.inter().fontFamily,
       ),
-
-      home: const LoginScreen(),
+      home: StreamBuilder<User?>(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          }
+          return snapshot.data == null
+              ? const LoginScreen()
+              : const HomeScreen(accessToken: '');
+        },
+      ),
     );
   }
 }

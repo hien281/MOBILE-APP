@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -209,10 +210,35 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onNavTap(int index) {
+    if (index == 4) {
+      _showAccountDialog();
+      return;
+    }
     setState(() => _selectedNavIndex = index);
     if (index == 1) _showComingSoon('Bản đồ');
     if (index == 3) _showComingSoon('Lịch của tôi');
     if (index == 4) _showComingSoon('Tài khoản');
+  }
+
+  Future<void> _showAccountDialog() async {
+    final user = FirebaseAuth.instance.currentUser;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Tài khoản SPORTY'),
+        content: Text(user?.email ?? 'Chưa có email'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Đóng')),
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await FirebaseAuth.instance.signOut();
+            },
+            child: const Text('Đăng xuất'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -298,8 +324,8 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'SPORTY',
+              Text(
+                'Xin chào, ${FirebaseAuth.instance.currentUser?.displayName?.trim().isNotEmpty == true ? FirebaseAuth.instance.currentUser!.displayName!.trim() : (FirebaseAuth.instance.currentUser?.email?.split('@').first ?? 'bạn')}!',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w900,

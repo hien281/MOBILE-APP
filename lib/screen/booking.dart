@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
 class BookingScreen extends StatefulWidget {
@@ -165,11 +166,15 @@ class _BookingScreenState extends State<BookingScreen> {
 
     setState(() => _submitting = true);
     try {
+      final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+      if (token == null || token.isEmpty) {
+        throw Exception('Vui lòng đăng nhập lại để đặt sân.');
+      }
       final response = await http.post(
         Uri.parse('${widget.baseUrl}/bookings'),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer ${widget.accessToken}',
+          'Authorization': 'Bearer $token',
         },
         body: jsonEncode({
           'fieldId': widget.fieldId,
