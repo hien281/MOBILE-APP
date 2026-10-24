@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import '../api_client.dart';
-import 'home.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'register.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -26,60 +27,91 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   
+  String _authError(Object error) {
+    if (error is FirebaseAuthException) {
+      switch (error.code) {
+        case 'invalid-email': return 'Email không hợp lệ.';
+        case 'invalid-credential':
+        case 'wrong-password':
+        case 'user-not-found': return 'Email hoặc mật khẩu không chính xác.';
+        case 'too-many-requests': return 'Thử quá nhiều lần. Vui lòng thử lại sau.';
+        case 'network-request-failed': return 'Không có kết nối mạng.';
+        default: return error.message ?? 'Đăng nhập thất bại.';
+      }
+    }
+    return 'Không thể đăng nhập lúc này. Vui lòng thử lại.';
+  }
+
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isLoading = true);
-
     try {
-      final result = await ApiClient.login(
+      if (kIsWeb) {
+        await FirebaseAuth.instance.setPersistence(
+          _rememberMe ? Persistence.LOCAL : Persistence.SESSION,
+        );
+      }
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
-
-      if (!mounted) return;
-
-      final user = result['user'] as Map<String, dynamic>;
-      final accessToken = result['accessToken'] as String;
-
-      if (accessToken.isEmpty) {
-        throw Exception('Server không trả về token đăng nhập.');
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Xin chào ${user['email'] ?? _emailController.text.trim()}!',
-          ),
-        ),
-      );
-
-      // Đăng nhập thành công -> chuyển sang trang chủ.
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => HomeScreen(
-            accessToken: accessToken,
-          ),
-        ),
-      );
+      // AuthGate trong main.dart tự điều hướng khi đăng nhập thành công.
     } catch (error) {
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            error.toString().replaceFirst('Exception: ', ''),
-          ),
-        ),
+        SnackBar(content: Text(_authError(error))),
       );
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  Future<void> _forgotPassword() async {
+    final emailController = TextEditingController(text: _emailController.text.trim());
+    final email = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Quên mật khẩu'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Nhập email để nhận liên kết đặt lại mật khẩu.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(labelText: 'Email'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Hủy')),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, emailController.text.trim()),
+            child: const Text('Gửi email'),
+          ),
+        ],
+      ),
+    );
+    emailController.dispose();
+    if (email == null || email.isEmpty) return;
+    if (!email.contains('@')) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Email chưa đúng định dạng.')),
+      );
+      return;
+    }
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Nếu email có tài khoản, hãy kiểm tra hộp thư để đặt lại mật khẩu.'),
+      ));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_authError(error))));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -229,15 +261,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         TextButton(
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Tính năng quên mật khẩu sẽ được bổ sung.',
-                                ),
-                              ),
-                            );
-                          },
+                          onPressed: _forgotPassword,
                           child: const Text(
                             'Forgot Password?',
                             style: TextStyle(fontSize: 12),
@@ -301,15 +325,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 16),
                     TextButton(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Màn hình đăng ký sẽ được làm sau.',
-                            ),
-                          ),
-                        );
-                      },
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterScreen())),
                       child: const Text(
                         "Don't have an account? Sign up",
                         style: TextStyle(
