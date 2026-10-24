@@ -66,6 +66,66 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  
+  Future<void> _socialLogin(AuthProvider provider) async {
+    if (_isLoading) return;
+
+    if (!kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Google/Facebook Login hiện đang được hỗ trợ trên Web.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      await FirebaseAuth.instance.setPersistence(
+        _rememberMe ? Persistence.LOCAL : Persistence.SESSION,
+      );
+
+      await FirebaseAuth.instance.signInWithPopup(provider);
+
+      // AuthGate trong main.dart sẽ tự chuyển sang Home.
+    } on FirebaseAuthException catch (error) {
+      if (!mounted) return;
+
+      // Người dùng đóng cửa sổ đăng nhập thì không cần báo lỗi.
+      if (error.code == 'popup-closed-by-user' ||
+          error.code == 'cancelled-popup-request') {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_authError(error))),
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Không thể đăng nhập. Vui lòng thử lại.'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _loginWithGoogle() async {
+    await _socialLogin(GoogleAuthProvider());
+  }
+
+  Future<void> _loginWithFacebook() async {
+    await _socialLogin(FacebookAuthProvider());
+  }
+
   Future<void> _forgotPassword() async {
     final emailController = TextEditingController(text: _emailController.text.trim());
     final email = await showDialog<String>(
@@ -314,6 +374,50 @@ class _LoginScreenState extends State<LoginScreen> {
                         Expanded(child: Divider()),
                       ],
                     ),
+                    
+                    const SizedBox(height: 20),
+
+                    OutlinedButton.icon(
+                      onPressed: _isLoading ? null : _loginWithGoogle,
+                      icon: const Text(
+                        'G',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF4285F4),
+                        ),
+                      ),
+                      label: const Text('Continue with Google'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(52),
+                        foregroundColor: const Color(0xFF1E147B),
+                        side: const BorderSide(color: Color(0xFFD7D4EE)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    OutlinedButton.icon(
+                      onPressed: _isLoading ? null : _loginWithFacebook,
+                      icon: const Icon(
+                        Icons.facebook,
+                        color: Color(0xFF1877F2),
+                        size: 25,
+                      ),
+                      label: const Text('Continue with Facebook'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(52),
+                        foregroundColor: const Color(0xFF1E147B),
+                        side: const BorderSide(color: Color(0xFFD7D4EE)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+
                     const SizedBox(height: 20),
                     const Text(
                       'Đặt sân thể thao dễ dàng, mọi lúc mọi nơi.',
