@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 
 class PaymentScreen extends StatefulWidget {
   final String bookingId;
@@ -11,6 +12,7 @@ class PaymentScreen extends StatefulWidget {
   final int totalPrice;
   final DateTime expiresAt;
   final String baseUrl;
+  final List<Map<String, String>> selections;
 
   const PaymentScreen({
     super.key,
@@ -19,505 +21,385 @@ class PaymentScreen extends StatefulWidget {
     required this.totalPrice,
     required this.expiresAt,
     required this.baseUrl,
+    required this.selections,
   });
 
   @override
   State<PaymentScreen> createState() => _PaymentScreenState();
 }
 
-class _PaymentScreenState extends State<PaymentScreen> {
-  static const Color primary = Color(0xFF1E147B);
-
-  Timer? _timer;
+class _PaymentScreenState extends State<PaymentScreen>
+    with WidgetsBindingObserver {
+  static const primary = Color(0xFF1E147B);
+  static const background = Color(0xFFF7F8FC);
+  Timer? _countdown;
+  Timer? _poll;
   Duration _remaining = Duration.zero;
-
   String _status = 'pending_payment';
+  String _paymentStatus = 'pending';
+  String? _error;
   bool _checking = false;
+  bool _paying = false;
   bool _cancelling = false;
+  bool _openedVNPay = false;
   bool _allowPop = false;
 
-  String? _error;
-
-  String _money(int amount) {
-    return amount.toString().replaceAllMapped(
-      RegExp(r'\B(?=(\d{3})+(?!\d))'),
-      (_) => '.',
-    );
-  }
+  String get _api => widget.baseUrl.replaceFirst(RegExp(r'/$'), '');
+  bool get _success => _status == 'confirmed' && _paymentStatus == 'paid';
+  bool get _closed => _status == 'cancelled' || _status == 'expired';
+  bool get _refund => _paymentStatus == 'refund_required';
+  bool get _expired => _remaining == Duration.zero;
+  bool get _canPay => !_success && !_closed && !_refund && !_expired &&
+      !_openedVNPay && !_paying && !_checking && !_cancelling;
 
   @override
   void initState() {
     super.initState();
-
+    WidgetsBinding.instance.addObserver(this);
     _tick();
+    _countdown = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+    _poll = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!_success && !_closed && !_refund) _refresh();
+    });
+    _refresh();
+  }
 
-    _timer = Timer.periodic(
-      const Duration(seconds: 1),
-      (_) => _tick(),
-    );
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refresh();
+  }
 
-    _refreshStatus();
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _countdown?.cancel();
+    _poll?.cancel();
+    super.dispose();
   }
 
   void _tick() {
     if (!mounted) return;
-
-    final difference =
-        widget.expiresAt.difference(DateTime.now());
-
-    setState(() {
-      _remaining = difference.isNegative
-          ? Duration.zero
-          : difference;
-    });
+    final d = widget.expiresAt.difference(DateTime.now());
+    setState(() => _remaining = d.isNegative ? Duration.zero : d);
   }
 
-  Future<bool> _refreshStatus() async {
-    if (_checking) return false;
+  String _money(int v) => v.toString().replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');
+  String _date(String raw) {
+    final d = DateTime.tryParse(raw);
+    if (d == null) return raw;
+    return '${d.day.toString().padLeft(2, '0')}/'
+        '${d.month.toString().padLeft(2, '0')}/${d.year}';
+  }
 
-    setState(() {
-      _checking = true;
-      _error = null;
-    });
+  String _court(String raw) {
+    final match = RegExp(r'court_(\d+)').firstMatch(raw);
+    return match == null ? raw : 'Sân ${match.group(1)}';
+  }
 
+  String _endTime(String raw) {
+    final parts = raw.split(':');
+    final hour = int.tryParse(parts.first);
+    if (hour == null) return raw;
+    return '${(hour + 1).toString().padLeft(2, '0')}:00';
+  }
+
+  Future<String> _token() async {
+    final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+    if (token == null || token.isEmpty) throw Exception('Vui lòng đăng nhập lại.');
+    return token;
+  }
+
+  Future<bool> _refresh() async {
+    if (_checking || !mounted) return false;
+    setState(() => _checking = true);
     try {
-      final token =
-          await FirebaseAuth.instance.currentUser?.getIdToken();
-
-      if (token == null) {
-        throw Exception('Bạn cần đăng nhập lại.');
-      }
-
-      final uri = Uri.parse(
-        '${widget.baseUrl}/bookings/'
-        '${Uri.encodeComponent(widget.bookingId)}/status',
-      );
-
+      final token = await _token();
       final response = await http.get(
-        uri,
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        Uri.parse('$_api/bookings/${Uri.encodeComponent(widget.bookingId)}/status'),
+        headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 15));
-
-      final data = jsonDecode(
-        utf8.decode(response.bodyBytes),
-      );
-
-      if (response.statusCode != 200 ||
-          data is! Map ||
-          data['success'] != true) {
-        throw Exception(
-          data is Map
-              ? data['message']?.toString() ??
-                  'Không kiểm tra được đơn.'
-              : 'Dữ liệu không hợp lệ.',
-        );
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      if (response.statusCode != 200 || data is! Map || data['success'] != true) {
+        throw Exception(data is Map ? (data['message'] ?? 'Không lấy được trạng thái') : 'Dữ liệu lỗi');
       }
-
       if (!mounted) return false;
-
       setState(() {
         _status = data['status']?.toString() ?? _status;
+        _paymentStatus = data['paymentStatus']?.toString() ?? _paymentStatus;
+        _error = null;
       });
-
       return true;
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-        });
-      }
-
+      if (mounted && _openedVNPay) setState(() => _error = 'Chưa cập nhật được kết quả: $e');
       return false;
     } finally {
-      if (mounted) {
-        setState(() {
-          _checking = false;
-        });
-      }
+      if (mounted) setState(() => _checking = false);
     }
   }
 
-  Future<bool> _cancelBooking() async {
-    if (_cancelling) return false;
-
-    setState(() {
-      _cancelling = true;
-      _error = null;
-    });
-
+  Future<void> _payVNPay() async {
+    if (!_canPay) return;
+    setState(() { _paying = true; _error = null; });
     try {
-      final token =
-          await FirebaseAuth.instance.currentUser?.getIdToken();
-
-      if (token == null) {
-        throw Exception('Bạn cần đăng nhập lại.');
-      }
-
-      final uri = Uri.parse(
-        '${widget.baseUrl}/bookings/'
-        '${Uri.encodeComponent(widget.bookingId)}/cancel',
-      );
-
+      final token = await _token();
       final response = await http.post(
-        uri,
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        Uri.parse('$_api/payments/vnpay/create'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: jsonEncode({'bookingId': widget.bookingId}),
       ).timeout(const Duration(seconds: 20));
-
-      final data = jsonDecode(
-        utf8.decode(response.bodyBytes),
-      );
-
-      if (response.statusCode != 200 ||
-          data is! Map ||
-          data['success'] != true) {
-        throw Exception(
-          data is Map
-              ? data['message']?.toString() ??
-                  'Không hủy được đơn.'
-              : 'Không hủy được đơn.',
-        );
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      if (response.statusCode != 200 || data is! Map || data['success'] != true) {
+        throw Exception(data is Map ? (data['message'] ?? 'Không tạo được giao dịch') : 'Phản hồi không hợp lệ');
       }
+      final url = Uri.tryParse(data['paymentUrl']?.toString() ?? '');
+      if (url == null || url.scheme != 'https' || url.host != 'sandbox.vnpayment.vn') {
+        throw Exception('Địa chỉ thanh toán Sandbox không hợp lệ.');
+      }
+      final opened = await launchUrl(url, mode: LaunchMode.externalApplication);
+      if (!opened) throw Exception('Không mở được trình duyệt thanh toán.');
+      if (mounted) setState(() => _openedVNPay = true);
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Không mở được VNPay: $e');
+    } finally {
+      if (mounted) setState(() => _paying = false);
+    }
+  }
 
-      if (!mounted) return false;
-
-      setState(() {
-        _status = 'cancelled';
-      });
-
+  Future<bool> _cancel() async {
+    if (_cancelling) return false;
+    setState(() => _cancelling = true);
+    try {
+      final token = await _token();
+      final response = await http.post(
+        Uri.parse('$_api/bookings/${Uri.encodeComponent(widget.bookingId)}/cancel'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 20));
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      if (response.statusCode != 200 || data is! Map || data['success'] != true) {
+        throw Exception(data is Map ? (data['message'] ?? 'Không hủy được đơn') : 'Không hủy được đơn');
+      }
+      if (mounted) setState(() { _status = 'cancelled'; _paymentStatus = 'cancelled'; });
       return true;
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = 'Hủy thất bại: $e';
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Hủy thất bại: $e'),
-          ),
-        );
-      }
-
+      if (mounted) setState(() => _error = 'Hủy đơn thất bại: $e');
       return false;
     } finally {
-      if (mounted) {
-        setState(() {
-          _cancelling = false;
-        });
-      }
+      if (mounted) setState(() => _cancelling = false);
     }
   }
 
   Future<bool> _onBack() async {
     if (_allowPop) return true;
-
-    if (_cancelling || _checking) {
-      return false;
-    }
-
-    // Kiểm tra trạng thái mới nhất từ backend.
-    final checked = await _refreshStatus();
-
+    if (_checking || _paying || _cancelling) return false;
+    final checked = await _refresh();
     if (!mounted) return false;
-
     if (!checked) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Không kiểm tra được trạng thái đơn. '
-            'Vui lòng thử lại.',
-          ),
+        const SnackBar(content: Text('Chưa xác minh được trạng thái đơn. Vui lòng thử lại.')),
+      );
+      return false;
+    }
+    if (_success || _closed || _refund || _status != 'pending_payment') {
+      _allowPop = true;
+      return true;
+    }
+    if (_openedVNPay) {
+      final leave = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Giao dịch đang xử lý'),
+          content: const Text('Nếu bạn đã thanh toán, hãy chờ SPORTY tự cập nhật. '
+              'Đừng thanh toán lần nữa. Bạn có thể rời màn hình mà không hủy giữ sân; '
+              'đơn sẽ tự hết hạn nếu không thanh toán thành công.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Ở lại')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Rời màn hình')),
+          ],
         ),
       );
-
+      if (leave == true) { _allowPop = true; return true; }
       return false;
     }
-
-    // Đơn đã hoàn tất hoặc không còn giữ sân.
-    if (_status != 'pending_payment') {
-      _allowPop = true;
-      return true;
-    }
-
     final cancel = await showDialog<bool>(
       context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Hủy giữ sân?'),
-          content: const Text(
-            'Nếu quay lại, đơn chờ thanh toán sẽ bị hủy '
-            'và các khung giờ được mở lại ngay.\n\n'
-            'Bạn có muốn hủy giữ sân không?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, false);
-              },
-              child: const Text('Tiếp tục thanh toán'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: primary,
-              ),
-              onPressed: () {
-                Navigator.pop(dialogContext, true);
-              },
-              child: const Text('Hủy giữ sân'),
-            ),
-          ],
-        );
-      },
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hủy giữ sân?'),
+        content: const Text('Nếu quay lại, SPORTY sẽ hủy đơn chưa thanh toán và giải phóng khung giờ.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Tiếp tục')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Hủy giữ sân')),
+        ],
+      ),
     );
-
-    if (cancel != true || !mounted) {
-      return false;
-    }
-
-    final success = await _cancelBooking();
-
-    if (success) {
+    if (cancel == true && mounted && await _cancel()) {
       _allowPop = true;
       return true;
     }
-
     return false;
   }
 
-  Future<void> _handleBackButton() async {
-    final canLeave = await _onBack();
-
-    if (!mounted || !canLeave) return;
-
-    Navigator.of(context).pop(true);
+  Future<void> _back() async {
+    if (await _onBack() && mounted) Navigator.pop(context, true);
   }
 
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
+  Widget _card(Widget child) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)),
+    child: child,
+  );
+
+  Widget _detail(String label, String value, {bool highlight = false}) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Expanded(child: Text(label, style: const TextStyle(color: Color(0xFF77788A)))),
+      const SizedBox(width: 12),
+      Flexible(child: Text(value, textAlign: TextAlign.right,
+          style: TextStyle(fontWeight: FontWeight.w700, color: highlight ? primary : const Color(0xFF202039)))),
+    ]),
+  );
 
   @override
   Widget build(BuildContext context) {
     final seconds = _remaining.inSeconds;
-
-    final countdown =
-        '${(seconds ~/ 60).toString().padLeft(2, '0')}:'
+    final countdown = '${(seconds ~/ 60).toString().padLeft(2, '0')}:'
         '${(seconds % 60).toString().padLeft(2, '0')}';
-
-    final expired = _remaining == Duration.zero;
-    final confirmed = _status == 'confirmed';
-
-    final cancelled =
-        _status == 'expired' || _status == 'cancelled';
+    final finished = _success || _closed || _refund || _expired;
+    final stateTitle = _success ? 'Đặt sân thành công!'
+        : _refund ? 'Giao dịch cần hỗ trợ hoàn tiền'
+        : _closed ? 'Đơn đặt sân đã kết thúc'
+        : _expired ? 'Đã hết thời gian giữ sân'
+        : _openedVNPay ? 'Đang xác minh thanh toán'
+        : 'Hoàn tất thanh toán';
+    final stateSubtitle = _success
+        ? 'Thanh toán đã được xác nhận. Hẹn gặp bạn tại sân!'
+        : _refund ? 'Vui lòng liên hệ đơn vị vận hành để kiểm tra giao dịch.'
+        : finished ? 'Bạn có thể quay lại chọn lịch khác.'
+        : _openedVNPay ? 'SPORTY tự kiểm tra trạng thái sau khi bạn trở lại ứng dụng.'
+        : 'Vui lòng thanh toán trước khi hết thời gian giữ sân.';
 
     return WillPopScope(
       onWillPop: _onBack,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF7F8FC),
+        backgroundColor: background,
         appBar: AppBar(
-          title: const Text('Thanh toán đặt sân'),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: _cancelling || _checking
-                ? null
-                : _handleBackButton,
-          ),
+          backgroundColor: background,
+          centerTitle: true,
+          title: Text(_success ? 'Xác nhận đặt sân' : 'Thanh toán đặt sân',
+              style: const TextStyle(fontWeight: FontWeight.bold)),
+          leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: _back),
         ),
-        body: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // ĐỒNG HỒ GIỮ SÂN
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  children: [
-                    const Icon(
-                      Icons.timer_outlined,
-                      size: 42,
-                      color: primary,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      confirmed
-                          ? 'Đã xác nhận'
-                          : cancelled || expired
-                              ? 'Đã hết thời gian giữ sân'
-                              : 'Thời gian giữ sân còn lại',
+        body: SafeArea(
+          child: Column(children: [
+            Expanded(child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                _card(Column(children: [
+                  Icon(_success ? Icons.check_circle_rounded
+                      : finished ? Icons.info_outline_rounded
+                      : Icons.timer_outlined,
+                      size: 56, color: _success ? const Color(0xFF169C67) : primary),
+                  const SizedBox(height: 12),
+                  Text(stateTitle, textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: primary)),
+                  const SizedBox(height: 7),
+                  Text(stateSubtitle, textAlign: TextAlign.center,
+                      style: const TextStyle(color: Color(0xFF6B6B80))),
+                  if (!finished) ...[
+                    const SizedBox(height: 16),
+                    const Text('Thời gian giữ sân còn lại', style: TextStyle(fontSize: 12)),
+                    const SizedBox(height: 5),
+                    Text(countdown, style: const TextStyle(fontSize: 36,
+                        fontWeight: FontWeight.w800, color: primary)),
+                  ],
+                ])),
+                const SizedBox(height: 14),
+                _card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Thông tin đặt sân', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  Text(widget.fieldName, style: const TextStyle(fontSize: 17,
+                      fontWeight: FontWeight.w700, color: primary)),
+                  const SizedBox(height: 10),
+                  _detail('Mã đặt sân', widget.bookingId),
+                  if (widget.selections.isNotEmpty) ...[
+                    _detail('Số ngày đặt', '${widget.selections.map((s) => s['date']).toSet().length} ngày'),
+                    const Divider(height: 22),
+                    const Text('Lịch sân đã chọn', style: TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    for (final date in (widget.selections.map((s) => s['date'] ?? '').toSet().toList()..sort())) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8, bottom: 3),
+                        child: Text(_date(date), style: const TextStyle(fontWeight: FontWeight.w700, color: primary)),
+                      ),
+                      for (final s in widget.selections.where((s) => s['date'] == date))
+                        _detail(_court(s['courtId'] ?? ''),
+                            '${s['startTime'] ?? ''} – ${_endTime(s['startTime'] ?? '')}'),
+                    ],
+                  ],
+                  const Divider(height: 25),
+                  _detail('Tổng thanh toán', '${_money(widget.totalPrice)}đ', highlight: true),
+                  _detail('Trạng thái', _success ? 'Đã thanh toán' : _closed ? 'Đã đóng' : 'Chờ thanh toán'),
+                ])),
+                const SizedBox(height: 14),
+                if (!finished) _card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Phương thức thanh toán', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  const ListTile(contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.account_balance_rounded, color: primary),
+                    title: Text('VNPay', style: TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text('Thanh toán thử nghiệm (Sandbox)'),
+                    trailing: Icon(Icons.check_circle, color: primary)),
+                  const Divider(),
+                  const ListTile(contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.account_balance_wallet_outlined),
+                    title: Text('MoMo'), subtitle: Text('Sắp hỗ trợ'), enabled: false),
+                  const ListTile(contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.qr_code), title: Text('QR chuyển khoản'),
+                    subtitle: Text('Chưa tích hợp'), enabled: false),
+                ])),
+                if (_error != null) Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(_error!, style: const TextStyle(color: Colors.red)),
+                ),
+                if (_openedVNPay && !finished) const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Text('Nếu đã thanh toán, đừng tạo giao dịch mới. '
+                      'Kết quả sẽ được cập nhật tự động khi backend nhận xác nhận VNPay.',
                       textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      confirmed ? 'Hoàn tất' : countdown,
-                      style: TextStyle(
-                        fontSize: 38,
-                        fontWeight: FontWeight.bold,
-                        color: expired
-                            ? Colors.red
-                            : primary,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Trạng thái đơn: $_status',
-                    ),
-                  ],
+                      style: TextStyle(fontSize: 12, color: Color(0xFF77788A))),
                 ),
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            // THÔNG TIN ĐƠN
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.fieldName,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Mã đơn: ${widget.bookingId}',
-                    ),
-                    const Divider(height: 28),
-                    Row(
-                      mainAxisAlignment:
-                          MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Tổng tiền',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          '${_money(widget.totalPrice)}đ',
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            // PHƯƠNG THỨC THANH TOÁN
-            const Card(
-              child: Padding(
-                padding: EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Phương thức thanh toán',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(height: 12),
-                    ListTile(
-                      leading: Icon(
-                        Icons.account_balance_wallet_outlined,
-                      ),
-                      title: Text('MoMo'),
-                      subtitle: Text(
-                        'Chưa kết nối cổng thanh toán',
-                      ),
-                      enabled: false,
-                    ),
-                    ListTile(
-                      leading: Icon(Icons.credit_card),
-                      title: Text('VNPay'),
-                      subtitle: Text(
-                        'Chưa kết nối cổng thanh toán',
-                      ),
-                      enabled: false,
-                    ),
-                    ListTile(
-                      leading: Icon(Icons.qr_code),
-                      title: Text('QR chuyển khoản'),
-                      subtitle: Text(
-                        'Chưa có xác minh thanh toán tự động',
-                      ),
-                      enabled: false,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: Text(
-                  _error!,
-                  style: const TextStyle(
-                    color: Colors.red,
-                  ),
-                ),
-              ),
-
-            const SizedBox(height: 12),
-
-            // KIỂM TRA TRẠNG THÁI
-            FilledButton.icon(
-              onPressed: _checking || _cancelling
-                  ? null
-                  : () {
-                      _refreshStatus();
-                    },
-              icon: const Icon(Icons.refresh),
-              label: Text(
-                _checking
-                    ? 'Đang kiểm tra...'
-                    : _cancelling
-                        ? 'Đang hủy...'
-                        : 'Kiểm tra trạng thái đơn',
-              ),
-              style: FilledButton.styleFrom(
-                backgroundColor: primary,
-                padding: const EdgeInsets.all(16),
-              ),
-            ),
-
-            const SizedBox(height: 8),
-
-            const Text(
-              'Đây là màn hình chờ thanh toán. '
-              'Đơn chưa được xác nhận cho đến khi backend '
-              'xác minh giao dịch thành công. '
-              'Hết 10 phút, thời gian giữ sân '
-              'không còn hiệu lực.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.black54,
-              ),
-            ),
-          ],
+              ],
+            )),
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              decoration: const BoxDecoration(color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+              child: SizedBox(width: double.infinity, child: _success
+                  ? FilledButton.icon(
+                      onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
+                      icon: const Icon(Icons.home_outlined),
+                      label: const Text('Về trang chủ'))
+                  : finished
+                      ? FilledButton(
+                          onPressed: _back,
+                          child: const Text('Quay lại đặt sân'))
+                      : _openedVNPay
+                          ? const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                SizedBox(width: 17, height: 17,
+                                    child: CircularProgressIndicator(strokeWidth: 2)),
+                                SizedBox(width: 10),
+                                Text('Đang tự động xác minh thanh toán'),
+                              ]))
+                          : FilledButton.icon(
+                              onPressed: _canPay ? _payVNPay : null,
+                              icon: const Icon(Icons.payment),
+                              label: Text(_paying ? 'Đang mở VNPay...'
+                                  : 'Thanh toán ${_money(widget.totalPrice)}đ qua VNPay')),
+              )),
+          ]),
         ),
       ),
     );

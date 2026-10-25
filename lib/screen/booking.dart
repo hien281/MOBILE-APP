@@ -163,6 +163,11 @@ class _BookingScreenState extends State<BookingScreen> {
         final totalPrice = booking is Map && booking['totalPrice'] is num
             ? (booking['totalPrice'] as num).toInt()
             : widget.price * selections.length;
+        final selectedDetails = selections.map((s) => Map<String, String>.from(s)).toList()
+          ..sort((a, b) {
+            final byTime = a['startTime']!.compareTo(b['startTime']!);
+            return byTime != 0 ? byTime : a['courtId']!.compareTo(b['courtId']!);
+          });
         await Navigator.push(
           context,
           MaterialPageRoute(
@@ -172,6 +177,7 @@ class _BookingScreenState extends State<BookingScreen> {
               totalPrice: totalPrice,
               expiresAt: expiresAt,
               baseUrl: widget.baseUrl,
+              selections: selectedDetails,
             ),
           ),
         );
@@ -368,14 +374,52 @@ class _BookingScreenState extends State<BookingScreen> {
           const SizedBox(height: 10),
           Row(children: [
             Expanded(child: OutlinedButton(
-              onPressed: () => Navigator.push(context, MaterialPageRoute(
-                builder: (_) => FixedBookingScreen(
-                  fieldId: widget.fieldId,
-                  fieldName: widget.fieldName,
-                  price: widget.price,
-                  baseUrl: widget.baseUrl,
-                ),
-              )),
+              onPressed: () async {
+                if (_selected.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Hãy chọn sân và khung giờ trước khi đặt cố định.'),
+                  ));
+                  return;
+                }
+                final selectedHours = <String, Set<int>>{};
+                for (final key in _selected) {
+                  final parts = key.split('|');
+                  selectedHours.putIfAbsent(parts[0], () => <int>{})
+                      .add(int.parse(parts[1].split(':').first));
+                }
+                final allHours = selectedHours.values.expand((s) => s).toSet();
+                final minHour = allHours.reduce((a, b) => a < b ? a : b);
+                final maxHour = allHours.reduce((a, b) => a > b ? a : b);
+                final contiguous = selectedHours.values.every((hours) =>
+                    hours.length == maxHour - minHour + 1 &&
+                    List.generate(maxHour - minHour + 1, (i) => minHour + i)
+                        .every(hours.contains));
+                if (!contiguous) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Đặt cố định cần cùng một dải giờ liên tục trên các sân. Hãy chọn lại các khung giờ liền nhau.'),
+                  ));
+                  return;
+                }
+                final initialSelections = _selected.map((key) {
+                  final parts = key.split('|');
+                  return <String, String>{
+                    'date': _dateKey(_date),
+                    'courtId': parts[0],
+                    'startTime': parts[1],
+                  };
+                }).toList();
+                await Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => FixedBookingScreen(
+                    fieldId: widget.fieldId,
+                    fieldName: widget.fieldName,
+                    price: widget.price,
+                    baseUrl: widget.baseUrl,
+                    initialDate: _date,
+                    initialSelections: initialSelections,
+                  ),
+                ));
+                if (mounted) await _load();
+              },
               child: const Text('Đặt cố định'),
             )),
             const SizedBox(width: 10),

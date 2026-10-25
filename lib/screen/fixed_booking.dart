@@ -3,11 +3,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'payment_screen.dart';
 
 class FixedBookingScreen extends StatefulWidget {
   final String fieldId, fieldName, baseUrl;
   final int price;
-  const FixedBookingScreen({super.key,required this.fieldId,required this.fieldName,required this.price,required this.baseUrl});
+  final DateTime initialDate;
+  final List<Map<String, String>> initialSelections;
+  const FixedBookingScreen({super.key,required this.fieldId,required this.fieldName,required this.price,required this.baseUrl,required this.initialDate,required this.initialSelections});
   @override
   State<FixedBookingScreen> createState()=>_FixedBookingScreenState();
 }
@@ -15,7 +18,7 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
   static const primary=Color(0xFF1E147B);
   late DateTime _month=DateTime(DateTime.now().year,DateTime.now().month);
   final Set<String> _dates={};
-  final Set<String> _courts={'court_1'};
+  final Set<String> _courts={};
   int _start=18, _end=20;
   bool _submitting=false, _checking=false;
   final Map<String,Set<String>> _busy={};
@@ -27,6 +30,24 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
   List<String> get _times=>[for(int h=_start;h<_end;h++)_time(h)];
   int get _count=>_dates.length*_courts.length*(_end-_start);
   bool get _hasConflict=>_dates.any((date)=>_courts.any((court)=>_times.any((time)=>_busy[date]?.contains('$court|$time')??false)));
+  @override
+  void initState() {
+    super.initState();
+    _month = DateTime(widget.initialDate.year, widget.initialDate.month);
+    _dates.add(_key(widget.initialDate));
+    final selections = widget.initialSelections;
+    if (selections.isNotEmpty) {
+      _courts.addAll(selections.map((s) => s['courtId'] ?? '').where((s) => s.isNotEmpty));
+      final hours = selections.map((s) => int.tryParse((s['startTime'] ?? '').split(':').first))
+          .whereType<int>().toList()..sort();
+      if (hours.isNotEmpty) {
+        _start = hours.first.clamp(6, 21);
+        _end = (hours.last + 1).clamp(_start + 1, 22);
+      }
+    }
+    if (_courts.isEmpty) _courts.add('court_1');
+    _check();
+  }
   @override
   void dispose(){_checkId++;super.dispose();}
   Future<void> _chooseTime() async {
@@ -76,7 +97,22 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
       final response=await http.post(Uri.parse('${widget.baseUrl}/bookings'),headers:{'Content-Type':'application/json','Authorization':'Bearer $token'},body:jsonEncode({'fieldId':widget.fieldId,'selections':selections})).timeout(const Duration(seconds:40));
       final data=jsonDecode(utf8.decode(response.bodyBytes));
       if(!mounted)return;
-      if(response.statusCode==201&&data is Map&&data['success']==true){Navigator.pop(context,true);return;}
+      if(response.statusCode==201&&data is Map&&data['success']==true){
+        final bookingId=data['bookingId']?.toString();
+        final booking=data['booking'];
+        final expiresAt=DateTime.tryParse((data['expiresAt'] ?? (booking is Map ? booking['expiresAt'] : null) ?? '').toString());
+        if(bookingId==null||bookingId.isEmpty||expiresAt==null)throw Exception('Backend chưa trả về bookingId hoặc expiresAt.');
+        final totalPrice=booking is Map && booking['totalPrice'] is num
+            ? (booking['totalPrice'] as num).toInt() : _count*widget.price;
+        final details=selections.map((s)=>Map<String,String>.from(s)).toList()
+          ..sort((a,b){final d=a['date']!.compareTo(b['date']!);if(d!=0)return d;final c=a['courtId']!.compareTo(b['courtId']!);return c!=0?c:a['startTime']!.compareTo(b['startTime']!);});
+        await Navigator.push(context,MaterialPageRoute(builder:(_)=>PaymentScreen(
+          bookingId:bookingId,fieldName:widget.fieldName,totalPrice:totalPrice,
+          expiresAt:expiresAt,baseUrl:widget.baseUrl,selections:details,
+        )));
+        if(mounted)Navigator.pop(context,true);
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(data is Map?data['message']?.toString()??'Đặt thất bại':'Đặt thất bại')));
       await _check();
     }catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Lỗi: $e')));}
@@ -88,7 +124,7 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
     final first=DateTime(_month.year,_month.month,1);final offset=first.weekday%7;final days=DateUtils.getDaysInMonth(_month.year,_month.month);final today=DateUtils.dateOnly(DateTime.now());
     return Scaffold(appBar:AppBar(title:const Text('Đặt cố định',style:TextStyle(fontWeight:FontWeight.bold)),centerTitle:true),backgroundColor:const Color(0xFFF7F8FC),body:Column(children:[
       Expanded(child:ListView(padding:const EdgeInsets.all(12),children:[
-        _section('Thiết lập lịch cố định',const Text('Chọn nhiều ngày bất kỳ trên lịch, sau đó chọn giờ và sân. Mỗi khung tính theo 1 giờ.')),
+        _section('Thiết lập lịch cố định',const Text('Đã giữ khung giờ và sân bạn vừa chọn. Chọn thêm các ngày muốn lặp lại; chỉ đổi giờ nếu cần. Mỗi khung tính theo 1 giờ.')),
         _section('1. Chọn ngày chơi',Column(children:[
           Row(children:[IconButton(onPressed:()=>setState(()=>_month=DateTime(_month.year,_month.month-1)),icon:const Icon(Icons.chevron_left)),Expanded(child:Center(child:Text('Tháng ${_month.month}/${_month.year}',style:const TextStyle(fontWeight:FontWeight.bold)))),IconButton(onPressed:()=>setState(()=>_month=DateTime(_month.year,_month.month+1)),icon:const Icon(Icons.chevron_right))]),
           GridView.builder(shrinkWrap:true,physics:const NeverScrollableScrollPhysics(),gridDelegate:const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount:7,mainAxisSpacing:3,crossAxisSpacing:3),itemCount:7+offset+days,itemBuilder:(ctx,i){if(i<7)return Center(child:Text(['CN','T2','T3','T4','T5','T6','T7'][i],style:const TextStyle(fontSize:12,fontWeight:FontWeight.bold)));final day=i-7-offset+1;if(day<1||day>days)return const SizedBox.shrink();final d=DateTime(_month.year,_month.month,day);final key=_key(d);final selected=_dates.contains(key);final past=d.isBefore(today);final conflict=selected&&_courts.any((c)=>_times.any((t)=>_busy[key]?.contains('$c|$t')??false));return InkWell(onTap:past?null:(){setState((){if(selected){_dates.remove(key);}else{_dates.add(key);}});_check();},child:Container(alignment:Alignment.center,decoration:BoxDecoration(color:conflict?Colors.red.shade100:selected?const Color(0xFFE1DCFF):null,borderRadius:BorderRadius.circular(8),border:selected?Border.all(color:conflict?Colors.red:primary):null),child:Text('$day',style:TextStyle(color:past?Colors.grey.shade400:conflict?Colors.red:selected?primary:Colors.black,fontWeight:selected?FontWeight.bold:FontWeight.normal))));}),
