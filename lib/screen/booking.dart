@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import 'fixed_booking.dart';
+import 'payment_screen.dart';
 
 class BookingScreen extends StatefulWidget {
   final String fieldId;
@@ -151,7 +152,30 @@ class _BookingScreenState extends State<BookingScreen> {
       final data = jsonDecode(utf8.decode(response.bodyBytes));
       if (!mounted) return;
       if (response.statusCode == 201 && data is Map && data['success'] == true) {
-        Navigator.pop(context, true);
+        final booking = data['booking'];
+        final expiresAt = DateTime.tryParse(
+          (data['expiresAt'] ?? (booking is Map ? booking['expiresAt'] : null) ?? '').toString(),
+        );
+        final bookingId = data['bookingId']?.toString();
+        if (bookingId == null || bookingId.isEmpty || expiresAt == null) {
+          throw Exception('Backend chưa trả về bookingId hoặc expiresAt.');
+        }
+        final totalPrice = booking is Map && booking['totalPrice'] is num
+            ? (booking['totalPrice'] as num).toInt()
+            : widget.price * selections.length;
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PaymentScreen(
+              bookingId: bookingId,
+              fieldName: widget.fieldName,
+              totalPrice: totalPrice,
+              expiresAt: expiresAt,
+              baseUrl: widget.baseUrl,
+            ),
+          ),
+        );
+        if (mounted) await _load();
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(

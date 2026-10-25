@@ -11,6 +11,8 @@ app.use(express.json());
 
 const bookingRoutes = require('./bookingRoutes');
 app.use('/api', bookingRoutes);
+const vnpayRoutes = require('./vnpayRoutes');
+app.use('/api', vnpayRoutes);
 const locationRoutes = require('./locationRoutes');
 app.use('/api', locationRoutes);
 
