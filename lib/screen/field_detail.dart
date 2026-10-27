@@ -6,10 +6,10 @@ import 'booking.dart';
 import 'home.dart';
 
 const Color colorPrimary = Color(0xFF1E147B);
-const Color colorYellow = Color(0xFFFFFC31);
+const Color colorYellow = Color.fromARGB(255, 255, 253, 110);
 const Color colorMauve = Color(0xFFC86FC9);
 const Color colorLavender = Color(0xFFDFDCF9);
-const Color colorBackground = Color(0xFFF6F7EB);
+const Color colorBackground = Color.fromARGB(255, 254, 255, 247);
 const Color colorTextSecondary = Color(0xFF77748E);
 
 class FieldDetailScreen extends StatefulWidget {
