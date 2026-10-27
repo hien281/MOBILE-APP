@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'dart:convert';
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -11,10 +12,11 @@ import 'booking.dart';
 import 'field_detail.dart';
 import 'search.dart';
 import 'map_screen.dart';
+import '../widgets/bottom_nav.dart';
 
-const Color oliveGreen = Color(0xFF1E147B);
-const Color pageBackground = Color(0xFFF6F7EB);
-const Color textPrimary = Color(0xFF1E147B);
+const Color oliveGreen = Color(0xFF35167F);
+const Color pageBackground = Color.fromARGB(255, 254, 255, 247);
+const Color textPrimary = Color(0xFF35167F);
 const Color textSecondary = Color(0xFF77748E);
 
 class SportsField {
@@ -98,6 +100,15 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   String _selectedSport = 'Tất cả';
   int _selectedNavIndex = 0;
+  bool _mapWasOpened = false;
+  final PageController _bannerController = PageController();
+  Timer? _bannerTimer;
+  int _bannerIndex = 0;
+  static const _bannerData = [
+    ('KHÁM PHÁ', 'Sân đẹp đang chờ bạn!', 'Tìm sân phù hợp cho trận đấu tiếp theo.', 'assets/images/banner_1.jpg'),
+    ('ĐẶT SÂN', 'Lên lịch chơi, SPORTY lo!', 'Chọn ngày, chọn giờ và đặt sân nhanh chóng.', 'assets/images/banner_2.jpg'),
+    ('KẾT NỐI', 'Rủ hội bạn, ra sân thôi!', 'Cùng bạn bè tạo nên những trận đấu đáng nhớ.', 'assets/images/banner_3.jpg'),
+  ];
 
   final Set<String> _favoriteIds = {};
 
@@ -123,6 +134,18 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadFields();
     _loadLocation();
+    _bannerTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted || !_bannerController.hasClients) return;
+      final next = (_bannerIndex + 1) % _bannerData.length;
+      _bannerController.animateToPage(next, duration: const Duration(milliseconds: 450), curve: Curves.easeInOut);
+    });
+  }
+
+  @override
+  void dispose() {
+    _bannerTimer?.cancel();
+    _bannerController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadLocation() async {
@@ -294,13 +317,13 @@ class _HomeScreenState extends State<HomeScreen> {
       _showAccountDialog();
       return;
     }
-    setState(() => _selectedNavIndex = index);
     if (index == 1) {
-      _openMapScreen();
+      setState(() { _mapWasOpened = true; _selectedNavIndex = 1; });
       return;
     }
     if (index == 2) _showComingSoon('Khám phá');
     if (index == 3) _showComingSoon('Lịch của tôi');
+    if (index == 0) setState(() => _selectedNavIndex = 0);
   }
 
   Future<void> _showAccountDialog() async {
@@ -335,7 +358,10 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       child: Scaffold(
         backgroundColor: pageBackground,
-        body: SafeArea(
+        body: IndexedStack(
+          index: _selectedNavIndex == 1 ? 1 : 0,
+          children: [
+            SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
             final isWide = constraints.maxWidth >= 700;
@@ -353,22 +379,22 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 30),
                             _buildHeader(),
-                            const SizedBox(height: 24),
+                            const SizedBox(height: 17),
                             _buildSearchBar(),
-                            const SizedBox(height: 28),
+                            const SizedBox(height: 18),
+                            _buildPromoBanner(),
+                            const SizedBox(height: 22),
                             _buildSectionTitle(
                               'Khám phá thể thao',
                               subtitle: 'Chọn môn thể thao bạn yêu thích',
                             ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 12),
                             _buildSportCategories(isWide),
-                            const SizedBox(height: 28),
-                            _buildPromoBanner(),
-                            const SizedBox(height: 28),
+                            const SizedBox(height: 23),
                             _buildFieldHeading(),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 12),
                           ],
                         ),
                       ),
@@ -389,113 +415,80 @@ class _HomeScreenState extends State<HomeScreen> {
           },
         ),
       ),
-      bottomNavigationBar: _buildBottomNavigation(),
+            if (_selectedNavIndex == 1 || _mapWasOpened)
+              MapScreen(
+                allFields: _fields,
+                currentPosition: _currentPosition,
+                accessToken: widget.accessToken,
+                favoriteIds: _favoriteIds,
+                onToggleFavorite: (id) {
+                  setState(() {
+                    if (!_favoriteIds.add(id)) _favoriteIds.remove(id);
+                  });
+                },
+              )
+            else
+              const SizedBox.shrink(),
+          ],
+        ),
+      bottomNavigationBar: SportyBottomNav(
+        selectedIndex: _selectedNavIndex,
+        onTap: _onNavTap,
+      ),
     ),
     );
   }
 
   Widget _buildHeader() {
+    final user = FirebaseAuth.instance.currentUser;
+    final name = user?.displayName?.trim().isNotEmpty == true
+        ? user!.displayName!.trim()
+        : (user?.email?.split('@').first ?? 'bạn');
+    final photo = user?.photoURL;
     return Row(
       children: [
-        Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: oliveGreen,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: const Icon(
-            Icons.sports_soccer_rounded,
-            color: Colors.white,
-            size: 28,
-          ),
+        CircleAvatar(
+          radius: 21,
+          backgroundColor: const Color(0xFFEDE7FA),
+          backgroundImage: photo != null && photo.isNotEmpty ? NetworkImage(photo) : null,
+          child: photo == null || photo.isEmpty
+              ? const Icon(Icons.person_rounded, color: oliveGreen, size: 25)
+              : null,
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Xin chào, ${FirebaseAuth.instance.currentUser?.displayName?.trim().isNotEmpty == true ? FirebaseAuth.instance.currentUser!.displayName!.trim() : (FirebaseAuth.instance.currentUser?.email?.split('@').first ?? 'bạn')}!',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.5,
-                  color: textPrimary,
-                ),
-              ),
+              const Text('Chào mừng trở lại!', style: TextStyle(fontSize: 11, color: textSecondary)),
+              const SizedBox(height: 2),
+              Text('Xin chào, $name!', maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: textPrimary)),
               const SizedBox(height: 3),
               InkWell(
                 onTap: _loadingLocation ? null : _loadLocation,
-                borderRadius: BorderRadius.circular(8),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.location_on_outlined,
-                      color: oliveGreen,
-                      size: 15,
-                    ),
-                    const SizedBox(width: 3),
-                    Flexible(
-                      child: Text(
-                        _locationLabel,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                    if (_loadingLocation) ...[
-                      const SizedBox(width: 6),
-                      const SizedBox(
-                        width: 11,
-                        height: 11,
-                        child: CircularProgressIndicator(strokeWidth: 1.5),
-                      ),
-                    ],
+                child: Row(children: [
+                  const Icon(Icons.location_on_outlined, color: oliveGreen, size: 13),
+                  const SizedBox(width: 3),
+                  Flexible(child: Text(_locationLabel, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 10, color: textSecondary))),
+                  if (_loadingLocation) ...[
+                    const SizedBox(width: 5),
+                    const SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1.5)),
                   ],
-                ),
+                ]),
               ),
             ],
           ),
         ),
+        const SizedBox(width: 6),
         IconButton(
           tooltip: 'Thông báo',
           onPressed: () => _showComingSoon('Thông báo'),
-          style: IconButton.styleFrom(
-            backgroundColor: Colors.white,
-            fixedSize: const Size(46, 46),
-          ),
-          icon: const Icon(
-            Icons.notifications_none_rounded,
-            color: textPrimary,
-          ),
+          style: IconButton.styleFrom(backgroundColor: const Color(0xFFF7F6FB), fixedSize: const Size(40, 40)),
+          icon: const Icon(Icons.notifications_none_rounded, color: oliveGreen, size: 22),
         ),
       ],
-    );
-  }
-
-  void _openMapScreen() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => MapScreen(
-          allFields: _fields,
-          currentPosition: _currentPosition,
-          accessToken: widget.accessToken,
-          favoriteIds: _favoriteIds,
-          onToggleFavorite: (id) {
-            setState(() {
-              if (_favoriteIds.contains(id)) {
-                _favoriteIds.remove(id);
-              } else {
-                _favoriteIds.add(id);
-              }
-            });
-          },
-        ),
-      ),
     );
   }
 
@@ -527,13 +520,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildSearchBar() {
     return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
+      height: 46,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(13),
         border: Border.all(
-          color: const Color(0xFFDFDCF9),
+          color: const Color(0xFFE8E1F5),
           width: 1.0,
         ),
         boxShadow: [
@@ -561,7 +554,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   'Tìm sân, môn thể thao, khu vực...',
                   style: TextStyle(
                     color: textSecondary,
-                    fontSize: 14,
+                    fontSize: 12,
                   ),
                 ),
               ),
@@ -599,7 +592,7 @@ class _HomeScreenState extends State<HomeScreen> {
         Text(
           title,
           style: const TextStyle(
-            fontSize: 19,
+            fontSize: 17,
             fontWeight: FontWeight.w800,
             color: textPrimary,
           ),
@@ -610,7 +603,7 @@ class _HomeScreenState extends State<HomeScreen> {
             subtitle,
             style: const TextStyle(
               color: textSecondary,
-              fontSize: 13,
+              fontSize: 11,
             ),
           ),
         ],
@@ -623,236 +616,146 @@ class _HomeScreenState extends State<HomeScreen> {
       'Tất cả': Icons.grid_view_rounded,
       'Bóng đá': Icons.sports_soccer_rounded,
       'Cầu lông': Icons.sports_tennis_rounded,
-      'Tennis': Icons.sports_tennis_rounded,
-      'Pickleball': Icons.sports_baseball_rounded,
+      'Tennis': Icons.sports_baseball_rounded,
+      'Pickleball': Icons.sports_tennis_rounded,
     };
-
     if (isWide) {
-      return Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        children: _sports.map((sport) {
-          return SizedBox(
-            width: 125,
-            child: _sportItem(sport, icons[sport]!),
-          );
-        }).toList(),
-      );
+      return Wrap(spacing: 15, runSpacing: 12,
+        children: _sports.map((sport) => _sportItem(sport, icons[sport]!)).toList());
     }
-
     return SizedBox(
-      height: 92,
+      height: 80,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: _sports.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 12),
+        separatorBuilder: (_, _) => const SizedBox(width: 10),
         itemBuilder: (context, index) {
           final sport = _sports[index];
-          return SizedBox(
-            width: 82,
-            child: _sportItem(sport, icons[sport]!),
-          );
+          return _sportItem(sport, icons[sport]!);
         },
       ),
     );
   }
 
   Widget _sportItem(String sport, IconData icon) {
-    final isSelected = _selectedSport == sport;
-
-    return Material(
-      color: isSelected ? oliveGreen : Colors.white,
-      borderRadius: BorderRadius.circular(17),
+    final selected = _selectedSport == sport;
+    return SizedBox(
+      width: 66,
       child: InkWell(
-        borderRadius: BorderRadius.circular(17),
-        onTap: () {
-          setState(() => _selectedSport = sport);
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            vertical: 14,
-            horizontal: 8,
-          ),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(17),
-            border: Border.all(
-              color: isSelected
-                  ? oliveGreen
-                  : const Color(0xFFDFDCF9),
+        borderRadius: BorderRadius.circular(18),
+        onTap: () => setState(() => _selectedSport = sport),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: 49, height: 49,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: selected ? oliveGreen : const Color(0xFFF0ECFA),
+              ),
+              child: (sport == 'Tennis' || sport == 'Pickleball')
+                  ? Padding(
+                      padding: const EdgeInsets.all(11),
+                      child: Image.asset(
+                        sport == 'Tennis'
+                            ? 'assets/images/icon_tennis.png'
+                            : 'assets/images/icon_pickleball.png',
+                        color: selected ? Colors.white : oliveGreen,
+                        errorBuilder: (_, __, ___) => Icon(icon, size: 23,
+                          color: selected ? Colors.white : oliveGreen),
+                      ),
+                    )
+                  : Icon(icon, size: 23, color: selected ? Colors.white : oliveGreen),
             ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 25,
-                color: isSelected ? Colors.white : oliveGreen,
-              ),
-              const SizedBox(height: 8),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  sport,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: isSelected ? Colors.white : textPrimary,
-                  ),
-                ),
-              ),
-            ],
-          ),
+            const SizedBox(height: 6),
+            Text(sport, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 10, fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                color: selected ? oliveGreen : textSecondary)),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildPromoBanner() {
-    return Container(
-      width: double.infinity,
-      constraints: const BoxConstraints(minHeight: 155),
-      decoration: BoxDecoration(
-        color: oliveGreen,
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            right: -25,
-            top: -30,
-            child: Container(
-              width: 155,
-              height: 155,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha:0.08),
-              ),
-            ),
+    return Column(
+      children: [
+        SizedBox(
+          height: 154,
+          child: PageView.builder(
+            controller: _bannerController,
+            itemCount: _bannerData.length,
+            onPageChanged: (index) => setState(() => _bannerIndex = index),
+            itemBuilder: (context, index) {
+              final banner = _bannerData[index];
+              return ClipRRect(
+                borderRadius: BorderRadius.circular(17),
+                child: Stack(fit: StackFit.expand, children: [
+                  Image.asset(banner.$4, fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(colors: [Color(0xFF35167F), Color(0xFF9A7CD5)])),
+                      child: const Align(alignment: Alignment.centerRight,
+                        child: Padding(padding: EdgeInsets.only(right: 16),
+                          child: Icon(Icons.sports_tennis_rounded, size: 96, color: Color(0x55FFFFFF)))),
+                    ),
+                  ),
+                  const DecoratedBox(decoration: BoxDecoration(
+                    gradient: LinearGradient(begin: Alignment.centerLeft, end: Alignment.centerRight,
+                      colors: [Color(0xD9000000), Color(0x77000000), Color(0x00000000)],
+                      stops: [0, 0.65, 1]),
+                  )),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(banner.$1, style: const TextStyle(fontSize: 9, letterSpacing: 1.2,
+                        color: Color(0xFFE9DFFF), fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 9),
+                      SizedBox(width: 210, child: Text(banner.$2,
+                        style: const TextStyle(fontSize: 19, height: 1.13,
+                          color: Colors.white, fontWeight: FontWeight.w800))),
+                      const SizedBox(height: 6),
+                      SizedBox(width: 220, child: Text(banner.$3,
+                        style: const TextStyle(fontSize: 10.5, height: 1.35, color: Colors.white))),
+                    ]),
+                  ),
+                ]),
+              );
+            },
           ),
-          Positioned(
-            right: 18,
-            bottom: -38,
-            child: Icon(
-              Icons.sports_tennis_rounded,
-              size: 140,
-              color: Colors.white.withValues(alpha:0.14),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(22),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha:0.18),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    'SPORTY MEMBER',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Sẵn sàng ra sân?',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                const Text(
-                  'Tìm sân phù hợp và bắt đầu trận đấu!',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                OutlinedButton(
-                  onPressed: () {
-                    setState(() {
-                      _selectedSport = 'Tất cả';
-                      _selectedNavIndex = 0;
-                    });
-                  },
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: oliveGreen,
-                    backgroundColor: Colors.white,
-                    side: BorderSide.none,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text(
-                    'Khám phá ngay',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 9),
+        Row(mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(_bannerData.length, (index) => AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            width: index == _bannerIndex ? 17 : 6, height: 6,
+            decoration: BoxDecoration(
+              color: index == _bannerIndex ? oliveGreen : const Color(0xFFE2DDEE),
+              borderRadius: BorderRadius.circular(10)),
+          )),
+        ),
+      ],
     );
   }
 
   Widget _buildFieldHeading() {
     final title = _selectedSport == 'Tất cả' ? 'Sân nổi bật' : 'Sân $_selectedSport';
-
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            title,
-            style: const TextStyle(
-              fontSize: 19,
-              fontWeight: FontWeight.w800,
-              color: textPrimary,
-            ),
-          ),
+    return Row(children: [
+      Expanded(child: Text(title, style: const TextStyle(
+        fontSize: 17, fontWeight: FontWeight.w800, color: textPrimary))),
+      if (_currentPosition != null)
+        TextButton.icon(
+          onPressed: () => setState(() => _sortByDistance = !_sortByDistance),
+          icon: Icon(_sortByDistance ? Icons.check_circle_outline_rounded : Icons.near_me_outlined, size: 15),
+          label: const Text('Gần nhất'),
+          style: TextButton.styleFrom(foregroundColor: oliveGreen,
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.symmetric(horizontal: 7),
+            textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
         ),
-        if (_currentPosition != null) ...[
-          TextButton.icon(
-            onPressed: () => setState(() => _sortByDistance = !_sortByDistance),
-            icon: Icon(_sortByDistance ? Icons.check_circle : Icons.near_me_outlined, size: 16),
-            label: Text(_sortByDistance ? 'Gần nhất ✓' : 'Gần nhất'),
-            style: TextButton.styleFrom(
-              foregroundColor: oliveGreen,
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
-        Text(
-          '${_filteredFields.length} sân',
-          style: const TextStyle(
-            fontSize: 12,
-            color: textSecondary,
-          ),
-        ),
-      ],
-    );
+    ]);
   }
 
   Widget _buildFieldGrid(bool isWide) {
@@ -955,8 +858,8 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFDFDCF9)),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFEAE5F3)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha:0.025),
@@ -970,14 +873,14 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           ClipRRect(
             borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(21),
+              top: Radius.circular(15),
             ),
             child: Stack(
               children: [
                 GestureDetector(
                   onTap: () => _openFieldDetail(field),
                   child: SizedBox(
-                  height: 175,
+                  height: 145,
                   width: double.infinity,
                   child: Image.network(
                     field.imageUrl,
@@ -1083,7 +986,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(15),
+            padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1196,7 +1099,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           Text(
                             '${_formatPrice(field.price)}đ',
                             style: const TextStyle(
-                              fontSize: 17,
+                              fontSize: 15,
                               fontWeight: FontWeight.w900,
                               color: oliveGreen,
                             ),
@@ -1265,61 +1168,4 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildBottomNavigation() {
-    const items = [
-      (icon: Icons.home_rounded, label: 'Trang chủ'),
-      (icon: Icons.map_outlined, label: 'Bản đồ'),
-      (icon: Icons.explore_outlined, label: 'Khám phá'),
-      (icon: Icons.calendar_month_outlined, label: 'Lịch của tôi'),
-      (icon: Icons.person_outline_rounded, label: 'Tài khoản'),
-    ];
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Color(0xFFDFDCF9))),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
-          child: Row(
-            children: List.generate(items.length, (index) {
-              final item = items[index];
-              final selected = _selectedNavIndex == index;
-              final center = index == 2;
-              return Expanded(
-                child: InkWell(
-                  onTap: () => _onNavTap(index),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: center ? 48 : 38,
-                        height: center ? 48 : 38,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: selected ? const Color(0xFF1E147B)
-                              : center ? const Color(0xFFDFDCF9) : Colors.transparent,
-                        ),
-                        child: Icon(item.icon, size: center ? 27 : 23,
-                          color: selected ? const Color(0xFFFFFC31)
-                              : const Color(0xFF85839A)),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(item.label, maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 9,
-                          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                          color: selected ? oliveGreen : textSecondary)),
-                    ],
-                  ),
-                ),
-              );
-            }),
-          ),
-        ),
-      ),
-    );
-  }
 }

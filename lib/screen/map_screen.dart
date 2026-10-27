@@ -27,6 +27,18 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
+  static const Color mapYellow = Color.fromARGB(255, 255, 238, 130);
+  static const Color mapSurface = Color(0xFFF8F7FC);
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _mapController.dispose();
+    super.dispose();
+  }
+
   late final MapController _mapController;
 
   String _selectedDistrict = 'Tất cả';
@@ -82,6 +94,11 @@ class _MapScreenState extends State<MapScreen> {
     return widget.allFields.where((field) {
       if (!_hasValidCoords(field)) return false;
 
+      final matchesSearch = _searchQuery.isEmpty ||
+          field.name.toLowerCase().contains(_searchQuery) ||
+          field.address.toLowerCase().contains(_searchQuery) ||
+          field.sport.toLowerCase().contains(_searchQuery);
+
       final matchesSport = _selectedSport == 'Tất cả' ||
           field.sport.toLowerCase() == _selectedSport.toLowerCase();
 
@@ -90,7 +107,7 @@ class _MapScreenState extends State<MapScreen> {
         matchesDistrict = field.address.toLowerCase().contains(_selectedDistrict.toLowerCase());
       }
 
-      return matchesSport && matchesDistrict;
+      return matchesSearch && matchesSport && matchesDistrict;
     }).toList();
   }
 
@@ -126,57 +143,56 @@ class _MapScreenState extends State<MapScreen> {
     return buffer.toString().split('').reversed.join('');
   }
 
-  Color _getSportColor(String sport) {
-    switch (sport.toLowerCase()) {
-      case 'bóng đá':
-        return const Color(0xFF1E147B);
-      case 'cầu lông':
-        return const Color(0xFFC86FC9);
-      case 'tennis':
-        return const Color(0xFF2E20A8);
-      case 'pickleball':
-        return const Color(0xFFFFFC31);
-      default:
-        return const Color(0xFF1E147B);
-    }
-  }
+  Color _getSportColor(String sport) => const Color.fromARGB(255, 53, 22, 127);
 
-  Color _getSportIconColor(String sport) {
-    if (sport.toLowerCase() == 'pickleball') {
-      return const Color(0xFF1E147B);
-    }
-    return Colors.white; 
-  }
+  Color _getSportIconColor(String sport) => Colors.white;
 
   IconData _getSportIcon(String sport) {
     switch (sport.toLowerCase()) {
-      case 'bóng đá':
-        return Icons.sports_soccer_rounded;
-      case 'cầu lông':
-        return Icons.sports_tennis_rounded;
-      case 'tennis':
-        return Icons.sports_tennis_rounded;
-      case 'pickleball':
-        return Icons.sports_baseball_rounded;
-      default:
-        return Icons.sports_rounded;
+      case 'bóng đá': return Icons.sports_soccer_rounded;
+      case 'cầu lông': return Icons.sports_tennis_rounded;
+      case 'tennis': return Icons.sports_baseball_rounded;
+      case 'pickleball': return Icons.sports_tennis_rounded;
+      default: return Icons.sports_rounded;
     }
   }
 
-  void _openFieldDetail(SportsField field) {
-    final distance = _distanceKm(field);
-    final distanceLabel = distance != null ? _distanceLabel(distance) : null;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => FieldDetailScreen(
-          field: field,
-          distanceLabel: distanceLabel,
-          accessToken: widget.accessToken,
-        ),
-      ),
-    );
+  Widget _sportMarkerIcon(String sport, double size, Color color) {
+    final name = sport.toLowerCase();
+    if (name == 'pickleball' || name == 'tennis') {
+      return Image.asset(
+        name == 'pickleball'
+            ? 'assets/images/icon_pickleball.png'
+            : 'assets/images/icon_tennis.png',
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+        color: color,
+        errorBuilder: (_, __, ___) =>
+            Icon(_getSportIcon(sport), color: color, size: size),
+      );
+    }
+    return Icon(_getSportIcon(sport), color: color, size: size);
   }
+
+  
+void _openFieldDetail(SportsField field) {
+  final distance = _distanceKm(field);
+  final distanceLabel = distance != null
+      ? _distanceLabel(distance)
+      : null;
+
+  Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => FieldDetailScreen(
+        field: field,
+        distanceLabel: distanceLabel,
+        accessToken: widget.accessToken,
+      ),
+    ),
+  );
+}
+
 
   void _recenterToUser() {
     final pos = widget.currentPosition;
@@ -254,7 +270,6 @@ class _MapScreenState extends State<MapScreen> {
                     final isSelected = _selectedField?.id == field.id;
                     final sportColor = _getSportColor(field.sport);
                     final iconColor = _getSportIconColor(field.sport);
-                    final sportIcon = _getSportIcon(field.sport);
 
                     return Marker(
                       point: LatLng(field.latitude!, field.longitude!),
@@ -274,7 +289,7 @@ class _MapScreenState extends State<MapScreen> {
                         child: _buildPointyPinMarker(
                           color: sportColor,
                           iconColor: iconColor,
-                          icon: sportIcon,
+                          sport: field.sport,
                           isSelected: isSelected,
                         ),
                       ),
@@ -295,12 +310,14 @@ class _MapScreenState extends State<MapScreen> {
 
             // 2. THANH LỌC TRÊN CÙNG
             Positioned(
-              top: MediaQuery.paddingOf(context).top + 8,
+              top: MediaQuery.paddingOf(context).top + 12,
               left: 16,
               right: 16,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  _buildSearchBar(),
+                  const SizedBox(height: 7),
                   Row(
                     children: [
                       Expanded(
@@ -311,7 +328,7 @@ class _MapScreenState extends State<MapScreen> {
                               : _selectedDistrict,
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 7),
                       Expanded(
                         child: _buildFilterButton(
                           filter: 'sport',
@@ -323,7 +340,7 @@ class _MapScreenState extends State<MapScreen> {
                     ],
                   ),
                   if (_openFilter != null) ...[
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -341,7 +358,7 @@ class _MapScreenState extends State<MapScreen> {
                                 )
                               : const SizedBox.shrink(),
                         ),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 7),
                         Expanded(
                           child: _openFilter == 'sport'
                               ? _buildFilterMenu(
@@ -370,7 +387,7 @@ class _MapScreenState extends State<MapScreen> {
                 heroTag: 'map_gps_btn',
                 mini: true,
                 backgroundColor: Colors.white,
-                foregroundColor: oliveGreen,
+                foregroundColor: const Color.fromARGB(255, 52, 21, 131),
                 elevation: 4,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -390,7 +407,6 @@ class _MapScreenState extends State<MapScreen> {
               ),
           ],
         ),
-        bottomNavigationBar: _buildBottomNavigation(),
       ),
     );
   }
@@ -401,7 +417,7 @@ class _MapScreenState extends State<MapScreen> {
   }) {
     final isOpen = _openFilter == filter;
     return Material(
-      color: const Color(0xFF1E147B),
+      color: const Color.fromARGB(255, 54, 21, 131),
       elevation: 4,
       shadowColor: Colors.black26,
       borderRadius: BorderRadius.circular(14),
@@ -409,7 +425,7 @@ class _MapScreenState extends State<MapScreen> {
       child: InkWell(
         onTap: () => setState(() => _openFilter = isOpen ? null : filter),
         child: SizedBox(
-          height: 40,
+          height: 34,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
@@ -449,27 +465,27 @@ class _MapScreenState extends State<MapScreen> {
     required ValueChanged<String> onSelected,
   }) {
     return Material(
-      color: const Color(0xFFF6F7EB),
+      color: mapSurface,
       elevation: 6,
       shadowColor: Colors.black26,
       borderRadius: BorderRadius.circular(14),
       clipBehavior: Clip.antiAlias,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: 200),
+        constraints: const BoxConstraints(maxHeight: 190),
         child: Scrollbar(
           child: ListView.builder(
             primary: false,
             shrinkWrap: true,
-            padding: EdgeInsets.zero,
-            itemExtent: 50,
+            padding: const EdgeInsets.all(3),
+            itemExtent: 39,
             itemCount: items.length,
             itemBuilder: (context, index) {
               final item = items[index];
               final isSelected = item == selected;
               return Material(
-                color: isSelected
-                    ? const Color(0xFFFFFC31)
-                    : const Color(0xFFF6F7EB),
+                color: isSelected ? mapYellow : mapSurface,
+                borderRadius: BorderRadius.circular(9),
+                clipBehavior: Clip.antiAlias,
                 child: InkWell(
                   onTap: () => onSelected(item),
                   child: Padding(
@@ -483,7 +499,7 @@ class _MapScreenState extends State<MapScreen> {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily,
-                              color: const Color(0xFF1E147B),
+                              color: const Color.fromARGB(255, 52, 21, 131),
                               fontSize: 11,
                               fontWeight: FontWeight.w800,
                             ),
@@ -493,7 +509,7 @@ class _MapScreenState extends State<MapScreen> {
                           const SizedBox(width: 4),
                           const Icon(
                             Icons.check_rounded,
-                            color: Color(0xFF1E147B),
+                            color: Color.fromARGB(255, 54, 21, 131),
                             size: 18,
                           ),
                         ],
@@ -512,7 +528,7 @@ class _MapScreenState extends State<MapScreen> {
   Widget _buildPointyPinMarker({
     required Color color,
     required Color iconColor,
-    required IconData icon,
+    required String sport,
     required bool isSelected,
   }) {
     final double headSize = isSelected ? 38 : 30;
@@ -531,7 +547,7 @@ class _MapScreenState extends State<MapScreen> {
             color: color,
             shape: BoxShape.circle,
             border: Border.all(
-              color: isSelected ? const Color(0xFFFFFC31) : Colors.white,
+              color: isSelected ? mapYellow : Colors.white,
               width: isSelected ? 3 : 2,
             ),
             boxShadow: [
@@ -542,11 +558,7 @@ class _MapScreenState extends State<MapScreen> {
               ),
             ],
           ),
-          child: Icon(
-            icon,
-            color: iconColor,
-            size: iconSize,
-          ),
+          child: Center(child: _sportMarkerIcon(sport, iconSize, iconColor)),
         ),
         // Mũi nhọn chỉ xuống địa điểm
         ClipPath(
@@ -554,7 +566,7 @@ class _MapScreenState extends State<MapScreen> {
           child: Container(
             width: pointerWidth,
             height: pointerHeight,
-            color: isSelected ? const Color(0xFFFFFC31) : color,
+            color: isSelected ? mapYellow : color,
           ),
         ),
       ],
@@ -600,7 +612,7 @@ class _MapScreenState extends State<MapScreen> {
                     errorBuilder: (context, error, stackTrace) => Container(
                       color: const Color(0xFFE8EDDF),
                       child: const Center(
-                        child: Icon(Icons.sports_rounded, color: oliveGreen, size: 28),
+                        child: Icon(Icons.sports_rounded, color: Color.fromARGB(255, 61, 21, 131), size: 28),
                       ),
                     ),
                   ),
@@ -684,7 +696,7 @@ class _MapScreenState extends State<MapScreen> {
                             style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w900,
-                              color: oliveGreen,
+                              color: Color.fromARGB(255, 52, 21, 131),
                             ),
                           ),
                           if (distance != null)
@@ -709,78 +721,43 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  Widget _buildBottomNavigation() {
-    const items = [
-      (icon: Icons.home_rounded, label: 'Trang chủ'),
-      (icon: Icons.map_rounded, label: 'Bản đồ'),
-      (icon: Icons.explore_outlined, label: 'Khám phá'),
-      (icon: Icons.calendar_month_outlined, label: 'Lịch của tôi'),
-      (icon: Icons.person_outline_rounded, label: 'Tài khoản'),
-    ];
-
+  Widget _buildSearchBar() {
     return Container(
-      decoration: const BoxDecoration(
+      height: 39,
+      decoration: BoxDecoration(
         color: Colors.white,
-        border: Border(top: BorderSide(color: Color(0xFFDFDCF9))),
+        borderRadius: BorderRadius.circular(13),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 7),
+        ],
       ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
-          child: Row(
-            children: List.generate(items.length, (index) {
-              final item = items[index];
-              final selected = index == 1; // Tab Bản đồ đang được chọn
-              final center = index == 2;
-              return Expanded(
-                child: InkWell(
-                  onTap: () {
-                    if (index == 0) {
-                      Navigator.pop(context); // Quay lại Trang chủ
-                    }
+      child: TextField(
+        controller: _searchController,
+        onChanged: (value) => setState(() {
+          _searchQuery = value.trim().toLowerCase();
+          _openFilter = null;
+        }),
+        style: const TextStyle(fontSize: 12, color: Color.fromARGB(255, 45, 21, 131)),
+        decoration: InputDecoration(
+          hintText: 'Tìm tên sân, bộ môn, khu vực...',
+          hintStyle: const TextStyle(fontSize: 11, color: Color(0xFF9995A6)),
+          prefixIcon: const Icon(Icons.search_rounded, size: 20, color: Color.fromARGB(255, 52, 21, 131)),
+          suffixIcon: _searchQuery.isEmpty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() => _searchQuery = '');
                   },
-                  borderRadius: BorderRadius.circular(12),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: center ? 48 : 38,
-                        height: center ? 48 : 38,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: selected
-                              ? const Color(0xFF1E147B)
-                              : center
-                                  ? const Color(0xFFDFDCF9)
-                                  : Colors.transparent,
-                        ),
-                        child: Icon(
-                          item.icon,
-                          size: center ? 27 : 23,
-                          color: selected ? const Color(0xFFFFFC31) : const Color(0xFF85839A),
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        item.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                          color: selected ? oliveGreen : textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
-              );
-            }),
-          ),
+          contentPadding: const EdgeInsets.symmetric(vertical: 9),
+          border: InputBorder.none,
         ),
       ),
     );
   }
+
 }
 
 // Clipper tạo hình tam giác nhọn cho chân Marker
