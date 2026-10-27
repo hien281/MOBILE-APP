@@ -4,12 +4,51 @@ const { requireAuth } = require('./authMiddleware');
 
 const router = express.Router();
 
-const HOURS = Array.from(
-  { length: 16 },
-  (_, i) => `${String(i + 6).padStart(2, '0')}:00`
-);
+// Cấu hình riêng của từng cơ sở, lấy từ fields/{fieldId}.
+// Mỗi lượt đặt hiện dài 60 phút và bắt đầu tại giờ tròn.
+function getFieldSchedule(data) {
+  const count = Number(data.courtCount);
+  const courtCount = Number.isInteger(count) && count >= 1 && count <= 100
+    ? count
+    : 1; // Tương thích với cơ sở cũ chưa có courtCount.
 
-const COURTS = ['court_1', 'court_2', 'court_3'];
+  const validTime = value =>
+    typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+
+  const openingTime = validTime(data.openingTime)
+    ? data.openingTime
+    : '06:00';
+  const closingTime = validTime(data.closingTime)
+    ? data.closingTime
+    : '22:00';
+
+  const toMinutes = time => {
+    const [hour, minute] = time.split(':').map(Number);
+    return hour * 60 + minute;
+  };
+  const open = toMinutes(openingTime);
+  const close = toMinutes(closingTime);
+
+  if (close <= open) {
+    throw new Error('Giờ hoạt động của cơ sở không hợp lệ.');
+  }
+
+  const hours = [];
+  for (let hour = 0; hour < 24; hour++) {
+    if (hour * 60 >= open && (hour + 1) * 60 <= close) {
+      hours.push(`${String(hour).padStart(2, '0')}:00`);
+    }
+  }
+
+  return {
+    courtCount,
+    openingTime,
+    closingTime,
+    courts: Array.from({ length: courtCount }, (_, i) => `court_${i + 1}`),
+    hours
+  };
+}
+
 const MAX_SLOTS = 100;
 const PAYMENT_TIMEOUT_MINUTES = 10;
 const PAYMENT_TIMEOUT_MS = PAYMENT_TIMEOUT_MINUTES * 60 * 1000;
@@ -61,8 +100,10 @@ function normalizedSelections(body) {
     if (
       !item ||
       !validDate(item.date) ||
-      !COURTS.includes(item.courtId) ||
-      !HOURS.includes(item.startTime)
+      typeof item.courtId !== 'string' ||
+      !/^court_[1-9]\d*$/.test(item.courtId) ||
+      typeof item.startTime !== 'string' ||
+      !/^([01]\d|2[0-3]):00$/.test(item.startTime)
     ) {
       return null;
     }
@@ -93,9 +134,6 @@ function expiredHeldSlot(data, nowMs) {
   );
 }
 
-// =====================================================
-// 1. KIỂM TRA LỊCH TRỐNG
-// =====================================================
 
 router.get('/fields/:id/availability', async (req, res) => {
   try {
@@ -118,6 +156,8 @@ router.get('/fields/:id/availability', async (req, res) => {
       });
     }
 
+    const schedule = getFieldSchedule(field.data());
+
     const snapshot = await db
       .collection('booking_slots')
       .where('fieldId', '==', id)
@@ -134,18 +174,18 @@ router.get('/fields/:id/availability', async (req, res) => {
       // Bỏ qua slot giữ sân đã hết hạn.
       if (expiredHeldSlot(item, nowMs)) continue;
 
-      if (COURTS.includes(item.courtId)) {
+      if (schedule.courts.includes(item.courtId)) {
         booked.add(`${item.courtId}|${item.startTime}`);
-      } else {
-        // Giữ tương thích với booking cũ.
+      } else if (!item.courtId) {
+        // Booking cũ không lưu courtId: chặn toàn bộ sân ở giờ này.
         legacy.add(item.startTime);
       }
     }
 
-    const courts = COURTS.map((courtId, i) => ({
+    const courts = schedule.courts.map((courtId, i) => ({
       courtId,
       name: `Sân ${i + 1}`,
-      slots: HOURS.map(startTime => ({
+      slots: schedule.hours.map(startTime => ({
         startTime,
         available:
           !legacy.has(startTime) &&
@@ -157,8 +197,11 @@ router.get('/fields/:id/availability', async (req, res) => {
       success: true,
       fieldId: id,
       date,
+      courtCount: schedule.courtCount,
+      openingTime: schedule.openingTime,
+      closingTime: schedule.closingTime,
       courts,
-      slots: courts[0].slots
+      slots: courts[0]?.slots || []
     });
   } catch (error) {
     console.error('Availability error:', error);
@@ -169,10 +212,6 @@ router.get('/fields/:id/availability', async (req, res) => {
     });
   }
 });
-
-// =====================================================
-// 2. TẠO ĐƠN GIỮ SÂN TRONG 10 PHÚT
-// =====================================================
 
 router.post('/bookings', requireAuth, async (req, res) => {
   try {
@@ -242,6 +281,17 @@ router.post('/bookings', requireAuth, async (req, res) => {
         return {
           status: 404,
           message: 'Không tìm thấy sân.'
+        };
+      }
+
+      const schedule = getFieldSchedule(field.data());
+      if (selections.some(s =>
+        !schedule.courts.includes(s.courtId) ||
+        !schedule.hours.includes(s.startTime)
+      )) {
+        return {
+          status: 400,
+          message: 'Sân hoặc khung giờ nằm ngoài lịch hoạt động của cơ sở.'
         };
       }
 
@@ -399,9 +449,6 @@ router.post('/bookings', requireAuth, async (req, res) => {
   }
 });
 
-// =====================================================
-// 3. HỦY ĐƠN VÀ GIẢI PHÓNG KHUNG GIỜ NGAY
-// =====================================================
 
 router.post(
   '/bookings/:id/cancel',
@@ -520,9 +567,6 @@ router.post(
   }
 );
 
-// =====================================================
-// 4. KIỂM TRA TRẠNG THÁI ĐƠN
-// =====================================================
 
 router.get(
   '/bookings/:id/status',
