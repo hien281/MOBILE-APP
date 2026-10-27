@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geolocator/geolocator.dart';
@@ -8,6 +9,8 @@ import '../api_client.dart';
 import '../location_service.dart';
 import 'booking.dart';
 import 'field_detail.dart';
+import 'search.dart';
+import 'map_screen.dart';
 
 const Color oliveGreen = Color(0xFF1E147B);
 const Color pageBackground = Color(0xFFF6F7EB);
@@ -93,11 +96,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final TextEditingController _searchController =
-      TextEditingController();
-
   String _selectedSport = 'Tất cả';
-  String _searchQuery = '';
   int _selectedNavIndex = 0;
 
   final Set<String> _favoriteIds = {};
@@ -107,7 +106,7 @@ class _HomeScreenState extends State<HomeScreen> {
     'Bóng đá',
     'Cầu lông',
     'Tennis',
-    'Bóng rổ',
+    'Pickleball',
   ];
 
   List<SportsField> _fields = [];
@@ -248,20 +247,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<SportsField> get _filteredFields {
     final result = _fields.where((field) {
-      final matchesSport = _selectedSport == 'Tất cả' ||
-          field.sport == _selectedSport;
-
-      final query = _searchQuery.trim().toLowerCase();
-      final matchesSearch = query.isEmpty ||
-          field.name.toLowerCase().contains(query) ||
-          field.address.toLowerCase().contains(query) ||
-          field.sport.toLowerCase().contains(query);
-
-      final matchesTab = true;
-
-      return matchesSport && matchesSearch && matchesTab;
+      return _selectedSport == 'Tất cả' ||
+          field.sport.toLowerCase() == _selectedSport.toLowerCase();
     }).toList();
-    if (_sortByDistance && _currentPosition != null) {
+
+    if (_sortByDistance) {
       result.sort((a, b) {
         final da = _distanceKm(a);
         final db = _distanceKm(b);
@@ -271,13 +261,8 @@ class _HomeScreenState extends State<HomeScreen> {
         return da.compareTo(db);
       });
     }
-    return result;
-  }
 
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
+    return result;
   }
 
   String _formatPrice(int price) {
@@ -310,9 +295,12 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     setState(() => _selectedNavIndex = index);
-    if (index == 1) _showComingSoon('Bản đồ');
+    if (index == 1) {
+      _openMapScreen();
+      return;
+    }
+    if (index == 2) _showComingSoon('Khám phá');
     if (index == 3) _showComingSoon('Lịch của tôi');
-    if (index == 4) _showComingSoon('Tài khoản');
   }
 
   Future<void> _showAccountDialog() async {
@@ -338,9 +326,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: pageBackground,
-      body: SafeArea(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: pageBackground,
+        statusBarIconBrightness: Brightness.dark,
+        systemNavigationBarColor: Colors.white,
+        systemNavigationBarIconBrightness: Brightness.dark,
+      ),
+      child: Scaffold(
+        backgroundColor: pageBackground,
+        body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
             final isWide = constraints.maxWidth >= 700;
@@ -395,6 +390,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       bottomNavigationBar: _buildBottomNavigation(),
+    ),
     );
   }
 
@@ -480,51 +476,114 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _openMapScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MapScreen(
+          allFields: _fields,
+          currentPosition: _currentPosition,
+          accessToken: widget.accessToken,
+          favoriteIds: _favoriteIds,
+          onToggleFavorite: (id) {
+            setState(() {
+              if (_favoriteIds.contains(id)) {
+                _favoriteIds.remove(id);
+              } else {
+                _favoriteIds.add(id);
+              }
+            });
+          },
+        ),
+      ),
+    );
+  }
+
+  void _openSearchScreen({bool autoFocus = true, bool openFilter = false}) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SearchScreen(
+          allFields: _fields,
+          initialSport: _selectedSport,
+          autoFocus: autoFocus,
+          openFilterImmediately: openFilter,
+          currentPosition: _currentPosition,
+          accessToken: widget.accessToken,
+          favoriteIds: _favoriteIds,
+          onToggleFavorite: (id) {
+            setState(() {
+              if (_favoriteIds.contains(id)) {
+                _favoriteIds.remove(id);
+              } else {
+                _favoriteIds.add(id);
+              }
+            });
+          },
+        ),
+      ),
+    );
+  }
+
   Widget _buildSearchBar() {
     return Container(
-      height: 54,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      height: 52,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(17),
-        border: Border.all(color: const Color(0xFFDFDCF9)),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFFDFDCF9),
+          width: 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Row(
         children: [
           const Icon(
             Icons.search_rounded,
             color: oliveGreen,
-            size: 25,
+            size: 24,
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: TextField(
-              controller: _searchController,
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                });
-              },
-              decoration: const InputDecoration(
-                hintText: 'Tìm sân, môn thể thao...',
-                hintStyle: TextStyle(
-                  color: textSecondary,
-                  fontSize: 14,
+            child: InkWell(
+              onTap: () => _openSearchScreen(autoFocus: true),
+              child: Container(
+                alignment: Alignment.centerLeft,
+                child: const Text(
+                  'Tìm sân, môn thể thao, khu vực...',
+                  style: TextStyle(
+                    color: textSecondary,
+                    fontSize: 14,
+                  ),
                 ),
-                border: InputBorder.none,
-                isCollapsed: true,
               ),
             ),
           ),
-          if (_searchQuery.isNotEmpty)
-            IconButton(
-              tooltip: 'Xóa tìm kiếm',
-              onPressed: () {
-                _searchController.clear();
-                setState(() => _searchQuery = '');
-              },
-              icon: const Icon(Icons.close_rounded, size: 20),
+          Container(
+            height: 24,
+            width: 1,
+            color: const Color(0xFFDFDCF9),
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+          ),
+          IconButton(
+            tooltip: 'Bộ lọc tìm kiếm',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            onPressed: () => _openSearchScreen(autoFocus: false, openFilter: true),
+            icon: const Icon(
+              Icons.tune_rounded,
+              color: oliveGreen,
+              size: 22,
             ),
+          ),
         ],
       ),
     );
@@ -565,7 +624,7 @@ class _HomeScreenState extends State<HomeScreen> {
       'Bóng đá': Icons.sports_soccer_rounded,
       'Cầu lông': Icons.sports_tennis_rounded,
       'Tennis': Icons.sports_tennis_rounded,
-      'Bóng rổ': Icons.sports_basketball_rounded,
+      'Pickleball': Icons.sports_baseball_rounded,
     };
 
     if (isWide) {
