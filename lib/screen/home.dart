@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import '../api_client.dart';
 import '../location_service.dart';
 import 'booking.dart';
+import 'field_detail.dart';
 
 const Color oliveGreen = Color(0xFF1E147B);
 const Color pageBackground = Color(0xFFF6F7EB);
@@ -24,6 +25,12 @@ class SportsField {
   final bool isPopular;
   final double? latitude;
   final double? longitude;
+  final String? openTime;
+  final String? closingTime;
+  final String? phone;
+  final int courtCount;
+  final List<String> facilities;
+  final String? googleMapsUrl;
 
   static double? _coordinate(dynamic value) {
     if (value is num) return value.toDouble();
@@ -42,6 +49,15 @@ class SportsField {
     isPopular: json['isPopular'] == true,
     latitude: _coordinate(json['latitude']),
     longitude: _coordinate(json['longitude']),
+    openTime: (json['openTime'] ?? json['openingTime'])?.toString(),
+    closingTime: (json['closingTime'] ?? json['closeTime'])?.toString(),
+    phone: json['phone']?.toString(),
+    courtCount: (json['courtCount'] as num?)?.toInt() ?? 1,
+    facilities: (json['facilities'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        const [],
+    googleMapsUrl: json['googleMapsUrl']?.toString(),
   );
 
   const SportsField({
@@ -55,6 +71,12 @@ class SportsField {
     this.isPopular = false,
     this.latitude,
     this.longitude,
+    this.openTime,
+    this.closingTime,
+    this.phone,
+    this.courtCount = 1,
+    this.facilities = const [],
+    this.googleMapsUrl,
   });
 }
 
@@ -852,6 +874,22 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+
+  void _openFieldDetail(SportsField field) {
+    final distance = _distanceKm(field);
+    final distanceLabel = distance != null ? 'Cách bạn ' : null;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FieldDetailScreen(
+          field: field,
+          distanceLabel: distanceLabel,
+          accessToken: widget.accessToken,
+        ),
+      ),
+    );
+  }
   Widget _buildFieldCard(SportsField field) {
     final isFavorite = _favoriteIds.contains(field.id);
 
@@ -877,7 +915,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             child: Stack(
               children: [
-                SizedBox(
+                GestureDetector(
+                  onTap: () => _openFieldDetail(field),
+                  child: SizedBox(
                   height: 175,
                   width: double.infinity,
                   child: Image.network(
@@ -908,6 +948,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       );
                     },
                   ),
+                ),
                 ),
                 if (field.isPopular)
                   Positioned(
@@ -1025,14 +1066,17 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
                 const SizedBox(height: 11),
-                Text(
-                  field.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    color: textPrimary,
+                GestureDetector(
+                  onTap: () => _openFieldDetail(field),
+                  child: Text(
+                    field.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: textPrimary,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 7),
