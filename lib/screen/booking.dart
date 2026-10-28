@@ -707,12 +707,6 @@ class _BookingScreenState extends State<BookingScreen> {
                     ),
                   ),
                 ),
-                const Padding(
-                  padding: EdgeInsets.all(8),
-                  child: Text(
-                    'Chạm nhiều ô để chọn nhiều khung giờ hoặc nhiều sân.',
-                    style: TextStyle(color: Colors.grey, fontSize: 12),
-                  ),
                 ),
               ],
             ),
