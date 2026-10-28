@@ -110,7 +110,7 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
               children: [
                 const Text(
                   'Chọn thời gian',
-                  style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 22),
                 SizedBox(
@@ -161,6 +161,7 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
                   children: [
                     Expanded(
                       child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(56), textStyle: const TextStyle(fontSize: 13)),
                         onPressed: () => Navigator.pop(sheetContext),
                         child: const Text('Hủy'),
                       ),
@@ -168,6 +169,7 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: FilledButton(
+                        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56), textStyle: const TextStyle(fontSize: 13)),
                         onPressed: end <= start
                             ? null
                             : () {
@@ -436,7 +438,9 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
     }
   }
 
-  Widget _section(String title, Widget child) => Card(
+  Widget _section(String title, Widget child) => Container(
+    margin: const EdgeInsets.only(bottom: 12),
+    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.50), borderRadius: BorderRadius.circular(15), border: Border.all(color: primary.withValues(alpha: 0.4), width: 0.7)),
     child: Padding(
       padding: const EdgeInsets.all(14),
       child: Column(
@@ -444,7 +448,7 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
         children: [
           Text(
             title,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 12),
           child,
@@ -461,11 +465,13 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFFF9F8F2),
+        toolbarHeight: 48,
+        iconTheme: const IconThemeData(color: primary, size: 19),
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         title: const Text(
           'Đặt cố định',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: primary),
         ),
         centerTitle: true,
       ),
@@ -681,7 +687,7 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
-                      style: FilledButton.styleFrom(backgroundColor: primary, minimumSize: const Size.fromHeight(50), textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                      style: FilledButton.styleFrom(backgroundColor: primary, minimumSize: const Size.fromHeight(58), textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                       onPressed:
                           _count > 0 &&
                               _count <= 100 &&
