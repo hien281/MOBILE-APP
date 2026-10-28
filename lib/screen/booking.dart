@@ -308,7 +308,7 @@ class _BookingScreenState extends State<BookingScreen> {
                       child: Text(
                         _time(hours.isEmpty ? 0 : hours.first + i),
                         style: const TextStyle(
-                          fontSize: 12,
+                          fontSize: 11,
                           color: Color(0xFF54566B),
                         ),
                       ),
@@ -366,7 +366,7 @@ class _BookingScreenState extends State<BookingScreen> {
                                               width: selected ? 2 : 1,
                                             ),
                                           ),
-                                          child: selected ? const Icon(Icons.check_rounded, color: primary, size: 24) : Text(
+                                          child: Column(mainAxisSize: MainAxisSize.min, mainAxisAlignment: MainAxisAlignment.center, children: [Text(
                                             booked
                                                 ? 'Hết chỗ'
                                                 : _past(hours[i])
@@ -381,6 +381,8 @@ class _BookingScreenState extends State<BookingScreen> {
                                                   : primary,
                                             ),
                                           ),
+                                          if (selected) const Icon(Icons.check_rounded, color: primary, size: 15),
+                                          ]),
                                         ),
                                       ),
                                     );
@@ -461,7 +463,7 @@ class _BookingScreenState extends State<BookingScreen> {
               ],
             ),
             if (selections.isNotEmpty) ...[
-              const SizedBox(height: 7),
+              const SizedBox(height: 14),
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -482,7 +484,7 @@ class _BookingScreenState extends State<BookingScreen> {
                     final courtNumber = courts.indexOf(parts[0]) + 1;
                     final startHour = int.parse(parts[1].substring(0, 2));
                     return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      padding: const EdgeInsets.symmetric(vertical: 5),
                       child: Row(
                         children: [
                           Expanded(
@@ -514,7 +516,7 @@ class _BookingScreenState extends State<BookingScreen> {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48), textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                    style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(56), textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                     onPressed: () async {
                       if (_selected.isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -606,17 +608,19 @@ class _BookingScreenState extends State<BookingScreen> {
       backgroundColor: Colors.transparent,
       appBar: AppBar(
         backgroundColor: const Color(0xFFF9F8F2),
+        toolbarHeight: 48,
+        iconTheme: const IconThemeData(color: primary, size: 19),
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         title: const Text(
           'Đặt sân',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: primary),
         ),
         centerTitle: true,
       ),
       body: Container(
         decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFFE9DEFF), Color(0xFFF3F0F5), Color(0xFFF8F6EA)], stops: [0, 0.55, 1])),
-        child: Column(
+        child: Theme(data: Theme.of(context).copyWith(cardTheme: CardThemeData(elevation: 0, color: Colors.white.withValues(alpha: 0.50), surfaceTintColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15), side: BorderSide(color: primary.withValues(alpha: 0.4), width: 0.7)))), child: Column(
         children: [
           Expanded(
             child: ListView(
@@ -631,8 +635,8 @@ class _BookingScreenState extends State<BookingScreen> {
                         Text(
                           widget.fieldName,
                           style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                         Text(
@@ -677,7 +681,7 @@ class _BookingScreenState extends State<BookingScreen> {
                                   '${_date.day}/${_date.month}/${_date.year}',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 17,
+                                    fontSize: 14,
                                   ),
                                 ),
                               ),
@@ -712,7 +716,7 @@ class _BookingScreenState extends State<BookingScreen> {
           ),
           _summary(),
         ],
-      ),
+      )),
             ),
     );
   }
