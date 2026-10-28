@@ -13,6 +13,8 @@ const bookingRoutes = require('./bookingRoutes');
 app.use('/api', bookingRoutes);
 const vnpayRoutes = require('./vnpayRoutes');
 app.use('/api', vnpayRoutes);
+const sepayRoutes = require('./sepayRoutes');
+app.use('/api', sepayRoutes);
 const locationRoutes = require('./locationRoutes');
 app.use('/api', locationRoutes);
 

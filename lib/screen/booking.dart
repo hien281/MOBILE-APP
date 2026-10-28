@@ -29,8 +29,8 @@ class BookingScreen extends StatefulWidget {
 }
 
 class _BookingScreenState extends State<BookingScreen> {
-  static const primary = Color(0xFF1E147B);
-  static const double rowHeight = 68;
+  static const primary = Color.fromARGB(255, 54, 27, 145);
+  static const double rowHeight = 60;
   static const double timeWidth = 57;
   List<String> courts = [];
   List<int> hours = [];
@@ -308,7 +308,7 @@ class _BookingScreenState extends State<BookingScreen> {
                       child: Text(
                         _time(hours.isEmpty ? 0 : hours.first + i),
                         style: const TextStyle(
-                          fontSize: 12,
+                          fontSize: 11,
                           color: Color(0xFF54566B),
                         ),
                       ),
@@ -366,7 +366,7 @@ class _BookingScreenState extends State<BookingScreen> {
                                               width: selected ? 2 : 1,
                                             ),
                                           ),
-                                          child: Text(
+                                          child: Column(mainAxisSize: MainAxisSize.min, mainAxisAlignment: MainAxisAlignment.center, children: [Text(
                                             booked
                                                 ? 'Hết chỗ'
                                                 : _past(hours[i])
@@ -381,6 +381,8 @@ class _BookingScreenState extends State<BookingScreen> {
                                                   : primary,
                                             ),
                                           ),
+                                          if (selected) const Padding(padding: EdgeInsets.only(top: 3), child: CircleAvatar(radius: 9, backgroundColor: primary, child: Icon(Icons.check_rounded, color: Colors.white, size: 12))),
+                                          ]),
                                         ),
                                       ),
                                     );
@@ -393,12 +395,36 @@ class _BookingScreenState extends State<BookingScreen> {
                     ),
                   if (showNow)
                     Positioned(
-                      top: currentY + 7,
-                      left: timeWidth - 6,
+                      top: currentY,
+                      left: 0,
                       right: 0,
                       child: IgnorePointer(
                         child: Row(
                           children: [
+                            SizedBox(
+                              width: timeWidth - 7,
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFDC4665),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    '${_now.hour.toString().padLeft(2, '0')}:${_now.minute.toString().padLeft(2, '0')}',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                             Container(
                               width: 7,
                               height: 7,
@@ -435,7 +461,7 @@ class _BookingScreenState extends State<BookingScreen> {
         return byTime != 0 ? byTime : pa[0].compareTo(pb[0]);
       });
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
       color: Colors.white,
       child: SafeArea(
         top: false,
@@ -460,7 +486,7 @@ class _BookingScreenState extends State<BookingScreen> {
               ],
             ),
             if (selections.isNotEmpty) ...[
-              const SizedBox(height: 7),
+              const SizedBox(height: 14),
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -481,7 +507,7 @@ class _BookingScreenState extends State<BookingScreen> {
                     final courtNumber = courts.indexOf(parts[0]) + 1;
                     final startHour = int.parse(parts[1].substring(0, 2));
                     return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      padding: const EdgeInsets.symmetric(vertical: 5),
                       child: Row(
                         children: [
                           Expanded(
@@ -508,11 +534,12 @@ class _BookingScreenState extends State<BookingScreen> {
                 ),
               ),
             ],
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(fixedSize: const Size.fromHeight(45), minimumSize: const Size.fromHeight(45), padding: EdgeInsets.zero, textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                     onPressed: () async {
                       if (_selected.isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -583,7 +610,7 @@ class _BookingScreenState extends State<BookingScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: FilledButton(
-                    style: FilledButton.styleFrom(backgroundColor: primary),
+                    style: FilledButton.styleFrom(backgroundColor: primary, fixedSize: const Size.fromHeight(45), minimumSize: const Size.fromHeight(45), padding: EdgeInsets.zero, textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                     onPressed: _selected.isNotEmpty && !_submitting
                         ? _book
                         : null,
@@ -601,15 +628,23 @@ class _BookingScreenState extends State<BookingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F8FC),
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
+        backgroundColor: const Color(0xFFF9F8F2),
+        toolbarHeight: 48,
+        iconTheme: const IconThemeData(color: primary, size: 20),
+        leading: IconButton(tooltip: 'Quay lại', icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF55278D), size: 20), onPressed: () => Navigator.maybePop(context)),
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
         title: const Text(
           'Đặt sân',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: primary),
         ),
         centerTitle: true,
       ),
-      body: Column(
+      body: Container(
+        decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFFE9DEFF), Color(0xFFF3F0F5), Color(0xFFF8F6EA)], stops: [0, 0.55, 1])),
+        child: Theme(data: Theme.of(context).copyWith(cardTheme: CardThemeData(elevation: 0, color: Colors.white.withValues(alpha: 0.50), surfaceTintColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15), side: BorderSide(color: primary.withValues(alpha: 0.4), width: 0.7)))), child: Column(
         children: [
           Expanded(
             child: ListView(
@@ -624,8 +659,8 @@ class _BookingScreenState extends State<BookingScreen> {
                         Text(
                           widget.fieldName,
                           style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                         Text(
@@ -670,7 +705,7 @@ class _BookingScreenState extends State<BookingScreen> {
                                   '${_date.day}/${_date.month}/${_date.year}',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 17,
+                                    fontSize: 14,
                                   ),
                                 ),
                               ),
@@ -700,19 +735,13 @@ class _BookingScreenState extends State<BookingScreen> {
                     ),
                   ),
                 ),
-                const Padding(
-                  padding: EdgeInsets.all(8),
-                  child: Text(
-                    'Chạm nhiều ô để chọn nhiều khung giờ hoặc nhiều sân.',
-                    style: TextStyle(color: Colors.grey, fontSize: 12),
-                  ),
-                ),
               ],
             ),
           ),
           _summary(),
         ],
-      ),
+      )),
+            ),
     );
   }
 }
