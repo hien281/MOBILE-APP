@@ -5,6 +5,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
+import 'sepay_checkout_screen.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+
+import 'sepay_web_stub.dart'
+    if (dart.library.html) 'sepay_web.dart'
+    as sepayWeb;
 
 class PaymentScreen extends StatefulWidget {
   final String bookingId;
@@ -44,6 +50,7 @@ class _PaymentScreenState extends State<PaymentScreen>
   bool _paying = false;
   bool _cancelling = false;
   bool _openedVNPay = false;
+  String _selectedPaymentMethod = 'vnpay';
   bool _allowPop = false;
   String? _resolvedImageUrl;
   String? _sportName;
@@ -238,6 +245,88 @@ class _PaymentScreenState extends State<PaymentScreen>
       if (mounted) setState(() => _paying = false);
     }
   }
+
+  
+Future<void> _paySePay() async {
+  if (!_canPay) return;
+
+  setState(() {
+    _paying = true;
+    _error = null;
+  });
+
+  try {
+    final token = await _token();
+
+    final response = await http
+        .post(
+          Uri.parse('$_api/payments/sepay/create'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+            'bookingId': widget.bookingId,
+          }),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    final data = jsonDecode(utf8.decode(response.bodyBytes));
+
+    if (response.statusCode != 200 ||
+        data is! Map ||
+        data['success'] != true) {
+      throw Exception(
+        data is Map
+            ? (data['message'] ?? 'Không tạo được thanh toán SePay')
+            : 'Phản hồi không hợp lệ',
+      );
+    }
+
+    final checkoutUrl = data['checkoutUrl']?.toString() ?? '';
+    final rawFields = data['fields'];
+
+    if (rawFields is! Map) {
+      throw Exception('Thiếu dữ liệu SePay Checkout.');
+    }
+
+    final fields = rawFields.map<String, dynamic>(
+      (key, value) => MapEntry(key.toString(), value),
+    );
+
+    if (!mounted) return;
+
+    // Đánh dấu đã bắt đầu phiên thanh toán.
+    setState(() => _openedVNPay = true);
+
+    if (kIsWeb) {
+    sepayWeb.openSePayWeb(checkoutUrl, fields);
+  } else {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SePayCheckoutScreen(
+          checkoutUrl: checkoutUrl,
+          fields: fields,
+        ),
+      ),
+    );
+}
+
+    if (mounted) {
+      await _refresh();
+    }
+  } catch (e) {
+    if (mounted) {
+      setState(() {
+        _error = 'Không mở được SePay: $e';
+      });
+    }
+  } finally {
+    if (mounted) {
+      setState(() => _paying = false);
+    }
+  }
+}
 
   Future<bool> _cancel() async {
     if (_cancelling) return false;
@@ -640,34 +729,60 @@ class _PaymentScreenState extends State<PaymentScreen>
                                 ),
                               ),
                               const SizedBox(height: 12),
-                              const ListTile(
-                                dense: true,
-                                visualDensity: VisualDensity.compact,
+                              RadioListTile<String>(
+                                value: 'vnpay',
+                                groupValue: _selectedPaymentMethod,
+                                onChanged: _openedVNPay
+                                    ? null
+                                    : (value) {
+                                        setState(() => _selectedPaymentMethod = value!);
+                                      },
                                 contentPadding: EdgeInsets.zero,
-                                leading: Icon(
-                                  Icons.account_balance_rounded,
-                                  color: primary,
-                                ),
-                                title: Text(
+                                activeColor: primary,
+                                title: const Text(
                                   'VNPay',
-                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
-                                subtitle: Text(
+                                subtitle: const Text(
                                   'Thanh toán trực tuyến',
                                   style: TextStyle(fontSize: 11),
                                 ),
-                                trailing: Icon(
-                                  Icons.check_circle,
+                                secondary: const Icon(
+                                  Icons.account_balance_rounded,
                                   color: primary,
                                 ),
                               ),
+
                               const Divider(),
-                              const ListTile(
+
+                              RadioListTile<String>(
+                                value: 'sepay',
+                                groupValue: _selectedPaymentMethod,
+                                onChanged: _openedVNPay
+                                    ? null
+                                    : (value) {
+                                        setState(() => _selectedPaymentMethod = value!);
+                                      },
                                 contentPadding: EdgeInsets.zero,
-                                leading: Icon(Icons.qr_code),
-                                title: Text('QR chuyển khoản'),
-                                subtitle: Text('Chưa tích hợp'),
-                                enabled: false,
+                                activeColor: primary,
+                                title: const Text(
+                                  'SePay QR',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                subtitle: const Text(
+                                  'Quét mã chuyển khoản ngân hàng',
+                                  style: TextStyle(fontSize: 11),
+                                ),
+                                secondary: const Icon(
+                                  Icons.qr_code,
+                                  color: primary,
+                                ),
                               ),
                             ],
                           ),
@@ -750,7 +865,11 @@ class _PaymentScreenState extends State<PaymentScreen>
                               backgroundColor: primary,
                               textStyle: const TextStyle(fontSize: 15),
                             ),
-                            onPressed: _canPay ? _payVNPay : null,
+                            onPressed: _canPay
+                            ? (_selectedPaymentMethod == 'sepay'
+                                ? _paySePay
+                                : _payVNPay)
+                            : null,
                             child: Text(
                               _paying ? 'Đang mở thanh toán...' : 'Thanh toán',
                             ),
