@@ -33,7 +33,7 @@ class PaymentScreen extends StatefulWidget {
 class _PaymentScreenState extends State<PaymentScreen>
     with WidgetsBindingObserver {
   static const primary = Color(0xFF55278D);
-  static const background = Color(0xFFF7F8FC);
+  static const background = Color(0xFFF5F4EB);
   Timer? _countdown;
   Timer? _poll;
   Duration _remaining = Duration.zero;
@@ -248,17 +248,17 @@ class _PaymentScreenState extends State<PaymentScreen>
   Widget _card(Widget child) => Container(
     width: double.infinity,
     padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.58), borderRadius: BorderRadius.circular(16), border: Border.all(color: primary.withValues(alpha: 0.35), width: 0.7)),
+    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.74), borderRadius: BorderRadius.circular(16), border: Border.all(color: primary.withValues(alpha: 0.35), width: 0.7)),
     child: child,
   );
 
   Widget _fieldPreview() => Container(
     width: 84, height: 76,
     clipBehavior: Clip.antiAlias,
-    decoration: BoxDecoration(color: const Color(0xFFEAE3F7), borderRadius: BorderRadius.circular(11)),
+    decoration: BoxDecoration(color: const Color(0xFFF0EEE5), borderRadius: BorderRadius.circular(11)),
     child: widget.fieldImageUrl != null && widget.fieldImageUrl!.trim().isNotEmpty
       ? Image.network(widget.fieldImageUrl!, fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => const Icon(Icons.sports_tennis_rounded, color: primary, size: 28))
+          errorBuilder: (context, error, stackTrace) => const Icon(Icons.image_outlined, color: Color(0xFF9B98A0), size: 26))
       : const Icon(Icons.sports_tennis_rounded, color: primary, size: 28),
   );
 
@@ -306,7 +306,7 @@ class _PaymentScreenState extends State<PaymentScreen>
           leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: primary), onPressed: _back),
         ),
         body: Container(
-          decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFFE9DEFF), Color(0xFFF3F0F5), Color(0xFFF8F6EA)], stops: [0, 0.55, 1])),
+          color: background,
           child: SafeArea(
           child: Column(children: [
             Expanded(child: ListView(
@@ -316,22 +316,22 @@ class _PaymentScreenState extends State<PaymentScreen>
                   Icon(_success ? Icons.check_circle_rounded
                       : finished ? Icons.info_outline_rounded
                       : Icons.timer_outlined,
-                      size: 38, color: _success ? const Color(0xFF169C67) : primary),
-                  const SizedBox(height: 12),
+                      size: 30, color: _success ? const Color(0xFF169C67) : primary),
+                  const SizedBox(height: 7),
                   Text(stateTitle, textAlign: TextAlign.center,
                       style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: primary)),
-                  const SizedBox(height: 7),
+                  const SizedBox(height: 4),
                   Text(stateSubtitle, textAlign: TextAlign.center,
                       style: const TextStyle(fontSize: 12, color: Color(0xFF6B6B80))),
                   if (!finished) ...[
                     const SizedBox(height: 9),
                     const Text('Thời gian giữ sân còn lại', style: TextStyle(fontSize: 12)),
-                    const SizedBox(height: 5),
-                    Text(countdown, style: const TextStyle(fontSize: 27,
-                        fontWeight: FontWeight.w800, color: primary)),
+                    const SizedBox(height: 3),
+                    Text(countdown, style: const TextStyle(fontSize: 21,
+                        fontWeight: FontWeight.w700, color: primary)),
                   ],
                 ])),
-                const SizedBox(height: 14),
+                const SizedBox(height: 11),
                 _card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   const Text('Thông tin đặt sân', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 12),
