@@ -45,6 +45,8 @@ class _PaymentScreenState extends State<PaymentScreen>
   bool _cancelling = false;
   bool _openedVNPay = false;
   bool _allowPop = false;
+  String? _resolvedImageUrl;
+  String? _sportName;
 
   String get _api => widget.baseUrl.replaceFirst(RegExp(r'/$'), '');
   bool get _success => _status == 'confirmed' && _paymentStatus == 'paid';
@@ -64,6 +66,29 @@ class _PaymentScreenState extends State<PaymentScreen>
       if (!_success && !_closed && !_refund) _refresh();
     });
     _refresh();
+    _loadFieldDetails();
+  }
+
+  Future<void> _loadFieldDetails() async {
+    try {
+      final response = await http.get(Uri.parse('$_api/fields')).timeout(const Duration(seconds: 12));
+      if (response.statusCode != 200) return;
+      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+      if (decoded is! Map || decoded['fields'] is! List) return;
+      for (final item in decoded['fields'] as List) {
+        if (item is! Map) continue;
+        if (item['name']?.toString().trim().toLowerCase() != widget.fieldName.trim().toLowerCase()) continue;
+        final image = item['imageUrl']?.toString();
+        if (!mounted) return;
+        setState(() {
+          _resolvedImageUrl = image != null && Uri.tryParse(image)?.hasAbsolutePath == true && image.startsWith('https://') ? image : null;
+          _sportName = item['sport']?.toString();
+        });
+        break;
+      }
+    } catch (_) {
+      // Keep the payment screen usable if venue details are temporarily unavailable.
+    }
   }
 
   @override
@@ -252,15 +277,24 @@ class _PaymentScreenState extends State<PaymentScreen>
     child: child,
   );
 
-  Widget _fieldPreview() => Container(
-    width: 84, height: 76,
-    clipBehavior: Clip.antiAlias,
-    decoration: BoxDecoration(color: const Color(0xFFF0EEE5), borderRadius: BorderRadius.circular(11)),
-    child: widget.fieldImageUrl != null && widget.fieldImageUrl!.trim().isNotEmpty
-      ? Image.network(widget.fieldImageUrl!, fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => const Icon(Icons.image_outlined, color: Color(0xFF9B98A0), size: 26))
-      : const Icon(Icons.sports_tennis_rounded, color: primary, size: 28),
-  );
+  Widget _fieldPreview() {
+    final imageUrl = widget.fieldImageUrl ?? _resolvedImageUrl;
+    return Container(
+      width: 98,
+      height: 80,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0EEE5),
+        borderRadius: BorderRadius.circular(11),
+      ),
+      child: imageUrl != null && imageUrl.isNotEmpty
+          ? Image.network(imageUrl, fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const Center(
+                child: Icon(Icons.image_outlined, color: Color(0xFF9B98A0)),
+              ))
+          : const Center(child: Icon(Icons.image_outlined, color: Color(0xFF9B98A0))),
+    );
+  }
 
   Widget _detail(String label, String value, {bool highlight = false}) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 6),
@@ -283,7 +317,7 @@ class _PaymentScreenState extends State<PaymentScreen>
         : _closed ? 'Đơn đặt sân đã kết thúc'
         : _expired ? 'Đã hết thời gian giữ sân'
         : _openedVNPay ? 'Đang xác minh thanh toán'
-        : 'Hoàn tất thanh toán';
+        : 'Chờ thanh toán';
     final stateSubtitle = _success
         ? 'Thanh toán đã được xác nhận. Hẹn gặp bạn tại sân!'
         : _refund ? 'Vui lòng liên hệ đơn vị vận hành để kiểm tra giao dịch.'
@@ -312,55 +346,66 @@ class _PaymentScreenState extends State<PaymentScreen>
             Expanded(child: ListView(
               padding: const EdgeInsets.all(14),
               children: [
-                _card(Column(children: [
-                  Icon(_success ? Icons.check_circle_rounded
-                      : finished ? Icons.info_outline_rounded
-                      : Icons.timer_outlined,
-                      size: 30, color: _success ? const Color(0xFF169C67) : primary),
-                  const SizedBox(height: 7),
-                  Text(stateTitle, textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: primary)),
-                  const SizedBox(height: 4),
-                  Text(stateSubtitle, textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 12, color: Color(0xFF6B6B80))),
-                  if (!finished) ...[
-                    const SizedBox(height: 9),
-                    const Text('Thời gian giữ sân còn lại', style: TextStyle(fontSize: 12)),
-                    const SizedBox(height: 3),
-                    Text(countdown, style: const TextStyle(fontSize: 21,
-                        fontWeight: FontWeight.w700, color: primary)),
-                  ],
-                ])),
+                _card(
+                  _success
+                      ? Row(
+                          children: [
+                            const CircleAvatar(
+                              radius: 13,
+                              backgroundColor: Color(0xFF159E65),
+                              child: Icon(Icons.check_rounded, color: Colors.white, size: 17),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Đặt sân thành công!',
+                                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: primary)),
+                                const SizedBox(height: 3),
+                                Text(stateSubtitle, style: const TextStyle(fontSize: 11, color: Color(0xFF6B6B80))),
+                              ],
+                            )),
+                          ],
+                        )
+                      : Column(
+                          children: [
+                            Text(stateSubtitle, textAlign: TextAlign.center,
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: primary)),
+                            if (!finished) ...[
+                              const SizedBox(height: 7),
+                              const Text('Thời gian giữ sân còn lại',
+                                  style: TextStyle(fontSize: 11, color: Color(0xFF6B6B80))),
+                              const SizedBox(height: 2),
+                              Text(countdown, style: const TextStyle(
+                                  fontSize: 21, fontWeight: FontWeight.w700, color: primary)),
+                            ],
+                          ],
+                        ),
+                ),
                 const SizedBox(height: 11),
                 _card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('Thông tin đặt sân', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 12),
-                  Row(children: [
+                  Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
                     _fieldPreview(),
                     const SizedBox(width: 12),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(widget.fieldName, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: primary)),
-                      const SizedBox(height: 5),
-                      Text('${_money(widget.totalPrice)}đ', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: primary)),
+                      Text(widget.fieldName, style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w700, color: primary)),
+                      const SizedBox(height: 6),
+                      Text('${_money(widget.totalPrice)}đ',
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: primary)),
                     ])),
                   ]),
-                  const SizedBox(height: 12),
-                  _detail('Mã đặt sân', widget.bookingId),
+                  const Divider(height: 25),
+                  const Text('Thông tin đặt sân',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 5),
                   if (widget.selections.isNotEmpty) ...[
-                    _detail('Số ngày đặt', '${widget.selections.map((s) => s['date']).toSet().length} ngày'),
-                    const Divider(height: 22),
-                    const Text('Lịch sân đã chọn', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 6),
-                    for (final date in (widget.selections.map((s) => s['date'] ?? '').toSet().toList()..sort())) ...[
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8, bottom: 3),
-                        child: Text(_date(date), style: const TextStyle(fontWeight: FontWeight.w700, color: primary)),
-                      ),
-                      for (final s in widget.selections.where((s) => s['date'] == date))
-                        _detail(_court(s['courtId'] ?? ''),
-                            '${s['startTime'] ?? ''} – ${_endTime(s['startTime'] ?? '')}'),
-                    ],
+                    _detail('Ngày đặt', (widget.selections.map((e) => e['date'] ?? '').toSet().toList()..sort()).map(_date).join(', ')),
+                    for (final entry in widget.selections)
+                      _detail(_court(entry['courtId'] ?? ''),
+                          '${entry['startTime'] ?? ''} – ${_endTime(entry['startTime'] ?? '')}'),
                   ],
+                  _detail('Bộ môn', (_sportName == null || _sportName!.isEmpty) ? 'Đang cập nhật' : _sportName!),
                   const Divider(height: 25),
                   _detail('Tổng thanh toán', '${_money(widget.totalPrice)}đ', highlight: true),
                   _detail('Trạng thái', _success ? 'Đã thanh toán' : _closed ? 'Đã đóng' : 'Chờ thanh toán'),
