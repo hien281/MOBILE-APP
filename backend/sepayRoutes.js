@@ -21,7 +21,16 @@ router.post('/payments/sepay/ipn', async (req, res) => {
   try {
     const secret = process.env.SEPAY_SECRET_KEY;
 
-    if (!validSecret(req.get('X-Secret-Key'), secret)) {
+    const providedSecret = req.get('X-Secret-Key');
+
+    if (!validSecret(providedSecret, secret)) {
+      console.warn('SePay IPN authentication failed', {
+        hasHeader: typeof providedSecret === 'string',
+        hasConfiguredSecret: Boolean(secret),
+        headerLength: providedSecret?.length ?? 0,
+        configuredLength: secret?.length ?? 0
+      });
+
       return res.status(401).json({ success: false });
     }
 
