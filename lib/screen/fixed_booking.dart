@@ -26,7 +26,7 @@ class FixedBookingScreen extends StatefulWidget {
 }
 
 class _FixedBookingScreenState extends State<FixedBookingScreen> {
-  static const primary = Color(0xFF55278D);
+  static const primary = Color.fromARGB(255, 50, 28, 149);
   late DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
   final Set<String> _dates = {};
   final Set<String> _courts = {};
@@ -161,7 +161,7 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(56), textStyle: const TextStyle(fontSize: 13)),
+                        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(56), textStyle: const TextStyle(fontSize: 16)),
                         onPressed: () => Navigator.pop(sheetContext),
                         child: const Text('Hủy'),
                       ),
@@ -169,7 +169,7 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: FilledButton(
-                        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56), textStyle: const TextStyle(fontSize: 13)),
+                        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56), textStyle: const TextStyle(fontSize: 16)),
                         onPressed: end <= start
                             ? null
                             : () {
@@ -611,7 +611,13 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
                   '2. Chọn khung giờ',
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text('${_time(_start)} – ${_time(_end)}'),
+                    title: Text(
+                      '${_time(_start)} – ${_time(_end)}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     subtitle: Text('${_end - _start} giờ / buổi'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: _scheduleLoaded && !_checking && _checkError == null
@@ -688,7 +694,7 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
-                      style: FilledButton.styleFrom(backgroundColor: primary, fixedSize: const Size.fromHeight(60), minimumSize: const Size.fromHeight(60), padding: EdgeInsets.zero, textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      style: FilledButton.styleFrom(backgroundColor: primary, fixedSize: const Size.fromHeight(50), minimumSize: const Size.fromHeight(50), padding: EdgeInsets.zero, textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                       onPressed:
                           _count > 0 &&
                               _count <= 100 &&

@@ -29,7 +29,7 @@ class BookingScreen extends StatefulWidget {
 }
 
 class _BookingScreenState extends State<BookingScreen> {
-  static const primary = Color(0xFF55278D);
+  static const primary = Color.fromARGB(255, 54, 27, 145);
   static const double rowHeight = 60;
   static const double timeWidth = 57;
   List<String> courts = [];
@@ -395,13 +395,36 @@ class _BookingScreenState extends State<BookingScreen> {
                     ),
                   if (showNow)
                     Positioned(
-                      top: currentY + 7,
+                      top: currentY,
                       left: 0,
                       right: 0,
                       child: IgnorePointer(
                         child: Row(
                           children: [
-                            SizedBox(width: timeWidth - 7, child: Text('${_now.hour.toString().padLeft(2, '0')}:${_now.minute.toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 10, color: Color(0xFFDC4665), fontWeight: FontWeight.w800))),
+                            SizedBox(
+                              width: timeWidth - 7,
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFDC4665),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    '${_now.hour.toString().padLeft(2, '0')}:${_now.minute.toString().padLeft(2, '0')}',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                             Container(
                               width: 7,
                               height: 7,
@@ -516,7 +539,7 @@ class _BookingScreenState extends State<BookingScreen> {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(fixedSize: const Size.fromHeight(58), minimumSize: const Size.fromHeight(58), padding: EdgeInsets.zero, textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    style: OutlinedButton.styleFrom(fixedSize: const Size.fromHeight(45), minimumSize: const Size.fromHeight(45), padding: EdgeInsets.zero, textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                     onPressed: () async {
                       if (_selected.isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -587,7 +610,7 @@ class _BookingScreenState extends State<BookingScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: FilledButton(
-                    style: FilledButton.styleFrom(backgroundColor: primary, fixedSize: const Size.fromHeight(58), minimumSize: const Size.fromHeight(58), padding: EdgeInsets.zero, textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    style: FilledButton.styleFrom(backgroundColor: primary, fixedSize: const Size.fromHeight(45), minimumSize: const Size.fromHeight(45), padding: EdgeInsets.zero, textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                     onPressed: _selected.isNotEmpty && !_submitting
                         ? _book
                         : null,
