@@ -381,7 +381,7 @@ class _BookingScreenState extends State<BookingScreen> {
                                                   : primary,
                                             ),
                                           ),
-                                          if (selected) const Icon(Icons.check_rounded, color: primary, size: 15),
+                                          if (selected) const Padding(padding: EdgeInsets.only(top: 3), child: CircleAvatar(radius: 9, backgroundColor: primary, child: Icon(Icons.check_rounded, color: Colors.white, size: 12))),
                                           ]),
                                         ),
                                       ),
@@ -516,7 +516,7 @@ class _BookingScreenState extends State<BookingScreen> {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(56), textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    style: OutlinedButton.styleFrom(fixedSize: const Size.fromHeight(58), minimumSize: const Size.fromHeight(58), padding: EdgeInsets.zero, textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                     onPressed: () async {
                       if (_selected.isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -587,7 +587,7 @@ class _BookingScreenState extends State<BookingScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: FilledButton(
-                    style: FilledButton.styleFrom(backgroundColor: primary),
+                    style: FilledButton.styleFrom(backgroundColor: primary, fixedSize: const Size.fromHeight(58), minimumSize: const Size.fromHeight(58), padding: EdgeInsets.zero, textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                     onPressed: _selected.isNotEmpty && !_submitting
                         ? _book
                         : null,
@@ -609,7 +609,8 @@ class _BookingScreenState extends State<BookingScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFFF9F8F2),
         toolbarHeight: 48,
-        iconTheme: const IconThemeData(color: primary, size: 19),
+        iconTheme: const IconThemeData(color: primary, size: 20),
+        leading: IconButton(tooltip: 'Quay lại', icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF55278D), size: 20), onPressed: () => Navigator.maybePop(context)),
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         title: const Text(
