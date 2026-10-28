@@ -13,6 +13,7 @@ class PaymentScreen extends StatefulWidget {
   final DateTime expiresAt;
   final String baseUrl;
   final List<Map<String, String>> selections;
+  final String? fieldImageUrl;
 
   const PaymentScreen({
     super.key,
@@ -22,6 +23,7 @@ class PaymentScreen extends StatefulWidget {
     required this.expiresAt,
     required this.baseUrl,
     required this.selections,
+    this.fieldImageUrl,
   });
 
   @override
@@ -30,7 +32,7 @@ class PaymentScreen extends StatefulWidget {
 
 class _PaymentScreenState extends State<PaymentScreen>
     with WidgetsBindingObserver {
-  static const primary = Color(0xFF1E147B);
+  static const primary = Color(0xFF55278D);
   static const background = Color(0xFFF7F8FC);
   Timer? _countdown;
   Timer? _poll;
@@ -245,18 +247,28 @@ class _PaymentScreenState extends State<PaymentScreen>
 
   Widget _card(Widget child) => Container(
     width: double.infinity,
-    padding: const EdgeInsets.all(18),
-    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)),
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.58), borderRadius: BorderRadius.circular(16), border: Border.all(color: primary.withValues(alpha: 0.35), width: 0.7)),
     child: child,
+  );
+
+  Widget _fieldPreview() => Container(
+    width: 84, height: 76,
+    clipBehavior: Clip.antiAlias,
+    decoration: BoxDecoration(color: const Color(0xFFEAE3F7), borderRadius: BorderRadius.circular(11)),
+    child: widget.fieldImageUrl != null && widget.fieldImageUrl!.trim().isNotEmpty
+      ? Image.network(widget.fieldImageUrl!, fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => const Icon(Icons.sports_tennis_rounded, color: primary, size: 28))
+      : const Icon(Icons.sports_tennis_rounded, color: primary, size: 28),
   );
 
   Widget _detail(String label, String value, {bool highlight = false}) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 6),
     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Expanded(child: Text(label, style: const TextStyle(color: Color(0xFF77788A)))),
+      Expanded(child: Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFF77788A)))),
       const SizedBox(width: 12),
       Flexible(child: Text(value, textAlign: TextAlign.right,
-          style: TextStyle(fontWeight: FontWeight.w700, color: highlight ? primary : const Color(0xFF202039)))),
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: highlight ? primary : const Color(0xFF202039)))),
     ]),
   );
 
@@ -284,48 +296,60 @@ class _PaymentScreenState extends State<PaymentScreen>
       child: Scaffold(
         backgroundColor: background,
         appBar: AppBar(
-          backgroundColor: background,
+          backgroundColor: const Color(0xFFF9F8F2),
+          toolbarHeight: 48,
+          elevation: 0,
+          surfaceTintColor: Colors.transparent,
           centerTitle: true,
           title: Text(_success ? 'Xác nhận đặt sân' : 'Thanh toán đặt sân',
-              style: const TextStyle(fontWeight: FontWeight.bold)),
-          leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: _back),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: primary)),
+          leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: primary), onPressed: _back),
         ),
-        body: SafeArea(
+        body: Container(
+          decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFFE9DEFF), Color(0xFFF3F0F5), Color(0xFFF8F6EA)], stops: [0, 0.55, 1])),
+          child: SafeArea(
           child: Column(children: [
             Expanded(child: ListView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(14),
               children: [
                 _card(Column(children: [
                   Icon(_success ? Icons.check_circle_rounded
                       : finished ? Icons.info_outline_rounded
                       : Icons.timer_outlined,
-                      size: 56, color: _success ? const Color(0xFF169C67) : primary),
+                      size: 38, color: _success ? const Color(0xFF169C67) : primary),
                   const SizedBox(height: 12),
                   Text(stateTitle, textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: primary)),
+                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: primary)),
                   const SizedBox(height: 7),
                   Text(stateSubtitle, textAlign: TextAlign.center,
-                      style: const TextStyle(color: Color(0xFF6B6B80))),
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF6B6B80))),
                   if (!finished) ...[
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 9),
                     const Text('Thời gian giữ sân còn lại', style: TextStyle(fontSize: 12)),
                     const SizedBox(height: 5),
-                    Text(countdown, style: const TextStyle(fontSize: 36,
+                    Text(countdown, style: const TextStyle(fontSize: 27,
                         fontWeight: FontWeight.w800, color: primary)),
                   ],
                 ])),
                 const SizedBox(height: 14),
                 _card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('Thông tin đặt sân', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                  const Text('Thông tin đặt sân', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 12),
-                  Text(widget.fieldName, style: const TextStyle(fontSize: 17,
-                      fontWeight: FontWeight.w700, color: primary)),
-                  const SizedBox(height: 10),
+                  Row(children: [
+                    _fieldPreview(),
+                    const SizedBox(width: 12),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(widget.fieldName, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: primary)),
+                      const SizedBox(height: 5),
+                      Text('${_money(widget.totalPrice)}đ', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: primary)),
+                    ])),
+                  ]),
+                  const SizedBox(height: 12),
                   _detail('Mã đặt sân', widget.bookingId),
                   if (widget.selections.isNotEmpty) ...[
                     _detail('Số ngày đặt', '${widget.selections.map((s) => s['date']).toSet().length} ngày'),
                     const Divider(height: 22),
-                    const Text('Lịch sân đã chọn', style: TextStyle(fontWeight: FontWeight.w700)),
+                    const Text('Lịch sân đã chọn', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
                     const SizedBox(height: 6),
                     for (final date in (widget.selections.map((s) => s['date'] ?? '').toSet().toList()..sort())) ...[
                       Padding(
@@ -343,12 +367,12 @@ class _PaymentScreenState extends State<PaymentScreen>
                 ])),
                 const SizedBox(height: 14),
                 if (!finished) _card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('Phương thức thanh toán', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                  const Text('Phương thức thanh toán', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 12),
-                  const ListTile(contentPadding: EdgeInsets.zero,
+                  const ListTile(dense: true, visualDensity: VisualDensity.compact, contentPadding: EdgeInsets.zero,
                     leading: Icon(Icons.account_balance_rounded, color: primary),
                     title: Text('VNPay', style: TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text('Thanh toán thử nghiệm (Sandbox)'),
+                    subtitle: Text('Thanh toán trực tuyến', style: TextStyle(fontSize: 11)),
                     trailing: Icon(Icons.check_circle, color: primary)),
                   const Divider(),
                   const ListTile(contentPadding: EdgeInsets.zero,
@@ -372,16 +396,17 @@ class _PaymentScreenState extends State<PaymentScreen>
               ],
             )),
             Container(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
               decoration: const BoxDecoration(color: Colors.white,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-              child: SizedBox(width: double.infinity, child: _success
-                  ? FilledButton.icon(
+              child: SizedBox(width: double.infinity, height: 45, child: _success
+                  ? FilledButton(
+                      style: FilledButton.styleFrom(backgroundColor: primary, textStyle: const TextStyle(fontSize: 15)),
                       onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
-                      icon: const Icon(Icons.home_outlined),
-                      label: const Text('Về trang chủ'))
+                      child: const Text('Về trang chủ'))
                   : finished
                       ? FilledButton(
+                          style: FilledButton.styleFrom(backgroundColor: primary, textStyle: const TextStyle(fontSize: 15)),
                           onPressed: _back,
                           child: const Text('Quay lại đặt sân'))
                       : _openedVNPay
@@ -393,13 +418,13 @@ class _PaymentScreenState extends State<PaymentScreen>
                                 SizedBox(width: 10),
                                 Text('Đang tự động xác minh thanh toán'),
                               ]))
-                          : FilledButton.icon(
+                          : FilledButton(
+                              style: FilledButton.styleFrom(backgroundColor: primary, textStyle: const TextStyle(fontSize: 15)),
                               onPressed: _canPay ? _payVNPay : null,
-                              icon: const Icon(Icons.payment),
-                              label: Text(_paying ? 'Đang mở VNPay...'
-                                  : 'Thanh toán ${_money(widget.totalPrice)}đ qua VNPay')),
+                              child: Text(_paying ? 'Đang mở thanh toán...' : 'Thanh toán')),
               )),
           ]),
+        ),
         ),
       ),
     );
