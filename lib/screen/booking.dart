@@ -29,8 +29,8 @@ class BookingScreen extends StatefulWidget {
 }
 
 class _BookingScreenState extends State<BookingScreen> {
-  static const primary = Color(0xFF1E147B);
-  static const double rowHeight = 68;
+  static const primary = Color(0xFF55278D);
+  static const double rowHeight = 60;
   static const double timeWidth = 57;
   List<String> courts = [];
   List<int> hours = [];
@@ -366,7 +366,7 @@ class _BookingScreenState extends State<BookingScreen> {
                                               width: selected ? 2 : 1,
                                             ),
                                           ),
-                                          child: Text(
+                                          child: selected ? const Icon(Icons.check_rounded, color: primary, size: 24) : Text(
                                             booked
                                                 ? 'Hết chỗ'
                                                 : _past(hours[i])
@@ -394,11 +394,12 @@ class _BookingScreenState extends State<BookingScreen> {
                   if (showNow)
                     Positioned(
                       top: currentY + 7,
-                      left: timeWidth - 6,
+                      left: 0,
                       right: 0,
                       child: IgnorePointer(
                         child: Row(
                           children: [
+                            SizedBox(width: timeWidth - 7, child: Text('${_now.hour.toString().padLeft(2, '0')}:${_now.minute.toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 10, color: Color(0xFFDC4665), fontWeight: FontWeight.w800))),
                             Container(
                               width: 7,
                               height: 7,
@@ -435,7 +436,7 @@ class _BookingScreenState extends State<BookingScreen> {
         return byTime != 0 ? byTime : pa[0].compareTo(pb[0]);
       });
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
       color: Colors.white,
       child: SafeArea(
         top: false,
@@ -508,11 +509,12 @@ class _BookingScreenState extends State<BookingScreen> {
                 ),
               ),
             ],
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48), textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
                     onPressed: () async {
                       if (_selected.isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -601,15 +603,20 @@ class _BookingScreenState extends State<BookingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F8FC),
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
+        backgroundColor: const Color(0xFFF9F8F2),
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
         title: const Text(
           'Đặt sân',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
       ),
-      body: Column(
+      body: Container(
+        decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFFE9DEFF), Color(0xFFF3F0F5), Color(0xFFF8F6EA)], stops: [0, 0.55, 1])),
+        child: Column(
         children: [
           Expanded(
             child: ListView(
@@ -713,6 +720,7 @@ class _BookingScreenState extends State<BookingScreen> {
           _summary(),
         ],
       ),
+            ),
     );
   }
 }
