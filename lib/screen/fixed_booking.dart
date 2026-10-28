@@ -466,7 +466,8 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFFF9F8F2),
         toolbarHeight: 48,
-        iconTheme: const IconThemeData(color: primary, size: 19),
+        iconTheme: const IconThemeData(color: primary, size: 20),
+        leading: IconButton(tooltip: 'Quay lại', icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF55278D), size: 20), onPressed: () => Navigator.maybePop(context)),
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         title: const Text(
@@ -687,7 +688,7 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
-                      style: FilledButton.styleFrom(backgroundColor: primary, minimumSize: const Size.fromHeight(58), textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      style: FilledButton.styleFrom(backgroundColor: primary, fixedSize: const Size.fromHeight(60), minimumSize: const Size.fromHeight(60), padding: EdgeInsets.zero, textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                       onPressed:
                           _count > 0 &&
                               _count <= 100 &&
