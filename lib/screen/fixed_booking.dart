@@ -26,7 +26,7 @@ class FixedBookingScreen extends StatefulWidget {
 }
 
 class _FixedBookingScreenState extends State<FixedBookingScreen> {
-  static const primary = Color(0xFF1E147B);
+  static const primary = Color(0xFF55278D);
   late DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
   final Set<String> _dates = {};
   final Set<String> _courts = {};
@@ -110,7 +110,7 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
               children: [
                 const Text(
                   'Chọn thời gian',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 22),
                 SizedBox(
@@ -444,7 +444,7 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
         children: [
           Text(
             title,
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 12),
           child,
@@ -460,25 +460,24 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
     final today = DateUtils.dateOnly(DateTime.now());
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: const Color(0xFFF9F8F2),
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
         title: const Text(
           'Đặt cố định',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
       ),
-      backgroundColor: const Color(0xFFF7F8FC),
-      body: Column(
+      backgroundColor: Colors.transparent,
+      body: Container(
+        decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFFE9DEFF), Color(0xFFF3F0F5), Color(0xFFF8F6EA)], stops: [0, 0.55, 1])),
+        child: Column(
         children: [
           Expanded(
             child: ListView(
               padding: const EdgeInsets.all(12),
               children: [
-                _section(
-                  'Thiết lập lịch cố định',
-                  const Text(
-                    'Đã giữ khung giờ và sân bạn vừa chọn. Chọn thêm các ngày muốn lặp lại; chỉ đổi giờ nếu cần. Mỗi khung tính theo 1 giờ.',
-                  ),
-                ),
                 _section(
                   '1. Chọn ngày chơi',
                   Column(
@@ -597,11 +596,7 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
                           );
                         },
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Đã chọn ${_dates.length} ngày. Chuyển tháng để chọn thêm.',
-                        style: const TextStyle(color: Colors.grey),
-                      ),
+
                     ],
                   ),
                 ),
@@ -686,7 +681,7 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
-                      style: FilledButton.styleFrom(backgroundColor: primary),
+                      style: FilledButton.styleFrom(backgroundColor: primary, minimumSize: const Size.fromHeight(50), textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
                       onPressed:
                           _count > 0 &&
                               _count <= 100 &&
@@ -705,6 +700,7 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
           ),
         ],
       ),
+            ),
     );
   }
 }
