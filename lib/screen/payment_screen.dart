@@ -420,12 +420,6 @@ class _PaymentScreenState extends State<PaymentScreen>
                     subtitle: Text('Thanh toán trực tuyến', style: TextStyle(fontSize: 11)),
                     trailing: Icon(Icons.check_circle, color: primary)),
                   const Divider(),
-                  const ListTile(contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.account_balance_wallet_outlined),
-                    title: Text('MoMo'), subtitle: Text('Sắp hỗ trợ'), enabled: false),
-                  const ListTile(contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.qr_code), title: Text('QR chuyển khoản'),
-                    subtitle: Text('Chưa tích hợp'), enabled: false),
                 ])),
                 if (_error != null) Padding(
                   padding: const EdgeInsets.only(top: 12),
