@@ -37,6 +37,9 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
 
   List<String> _availableCourts = [];
   bool _scheduleLoaded = false;
+  bool _useMembership = false;
+  String? _selectedCardId;
+  List<Map<String, dynamic>> _membershipCards = [];
   bool _submitting = false, _checking = false;
   final Map<String, Set<String>> _busy = {};
   String? _checkError;
@@ -79,6 +82,22 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
     }
     if (_courts.isEmpty) _courts.add('court_1');
     _check();
+    _loadMembershipCards();
+  }
+
+  Future<void> _loadMembershipCards() async {
+    try {
+      final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+      if (token == null) return;
+      final response = await http.get(Uri.parse('${widget.baseUrl}/my-memberships'), headers: {'Authorization': 'Bearer $token'}).timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) return;
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      if (!mounted || data is! Map || data['memberships'] is! List) return;
+      setState(() {
+        _membershipCards = (data['memberships'] as List).whereType<Map>().map((m) => Map<String, dynamic>.from(m)).where((m) => m['fieldId'] == widget.fieldId && m['status'] == 'active' && (m['remainingSlots'] is num && (m['remainingSlots'] as num) > 0)).toList();
+        if (!_membershipCards.any((m) => m['id'] == _selectedCardId)) _selectedCardId = null;
+      });
+    } catch (_) { /* Paid booking remains available if cards cannot load. */ }
   }
 
   @override
@@ -364,9 +383,10 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
             for (final time in _times)
               {'date': date, 'courtId': court, 'startTime': time},
       ];
+      if (_useMembership && _selectedCardId == null) throw Exception('Vui lòng chọn thẻ hội viên.');
       final response = await http
           .post(
-            Uri.parse('${widget.baseUrl}/bookings'),
+            Uri.parse('${widget.baseUrl}/${_useMembership ? 'membership-fixed-bookings' : 'bookings'}'),
             headers: {
               'Content-Type': 'application/json',
               'Authorization': 'Bearer $token',
@@ -374,11 +394,17 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
             body: jsonEncode({
               'fieldId': widget.fieldId,
               'selections': selections,
+              if (_useMembership) 'membershipCardId': _selectedCardId,
             }),
           )
           .timeout(const Duration(seconds: 40));
       final data = jsonDecode(utf8.decode(response.bodyBytes));
       if (!mounted) return;
+      if (response.statusCode == 201 && data is Map && data['success'] == true && _useMembership) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Đã đặt ${data['usedSlots']} buổi bằng thẻ hội viên.')));
+        Navigator.pop(context, true);
+        return;
+      }
       if (response.statusCode == 201 &&
           data is Map &&
           data['success'] == true) {
@@ -649,6 +675,21 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
                     ],
                   ),
                 ),
+                _section('4. Hình thức thanh toán', Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    RadioListTile<bool>(title: const Text('Thanh toán thông thường'), value: false, groupValue: _useMembership, onChanged: (v) => setState(() => _useMembership = false)),
+                    RadioListTile<bool>(title: const Text('Sử dụng thẻ hội viên'), value: true, groupValue: _useMembership, onChanged: _membershipCards.isEmpty ? null : (v) => setState(() => _useMembership = true)),
+                    if (_membershipCards.isEmpty) const Text('Không có thẻ hội viên còn lượt cho sân này.', style: TextStyle(fontSize: 12)),
+                    if (_useMembership) DropdownButtonFormField<String>(
+                      value: _selectedCardId,
+                      decoration: const InputDecoration(labelText: 'Chọn thẻ hội viên'),
+                      items: _membershipCards.map((m) => DropdownMenuItem<String>(value: m['id'].toString(), child: Text("${m['membershipName'] ?? 'Thẻ hội viên'} · ${m['remainingSlots']} lượt"))).toList(),
+                      onChanged: (v) => setState(() => _selectedCardId = v),
+                    ),
+                    if (_useMembership) Text('Cần ${_dates.length * _courts.length} lượt. Mỗi buổi trừ 1 lượt; nếu một buổi không hợp lệ, toàn bộ lịch sẽ không được đặt.', style: const TextStyle(fontSize: 12)),
+                  ],
+                )),
                 if (_checking) const LinearProgressIndicator(),
                 if (_checkError != null)
                   Text(
@@ -681,7 +722,7 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
                         ),
                       ),
                       Text(
-                        '${_money(_count * widget.price)}đ',
+                        _useMembership ? '${_dates.length * _courts.length} lượt' : '${_money(_count * widget.price)}đ',
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           color: primary,
@@ -701,7 +742,8 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
                               !_checking &&
                               _checkError == null &&
                               !_hasConflict &&
-                              !_submitting
+                              !_submitting &&
+                              (!_useMembership || (_selectedCardId != null && _membershipCards.any((m) => m['id'] == _selectedCardId && (m['remainingSlots'] as num) >= _dates.length * _courts.length)))
                           ? _submit
                           : null,
                       child: Text(_submitting ? 'Đang đặt...' : 'Tiếp tục'),
