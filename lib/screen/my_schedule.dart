@@ -192,29 +192,51 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
   }
 
   void _details(Map<String,dynamic> b) {
-    showModalBottomSheet<void>(context:context,isScrollControlled:true,showDragHandle:true,builder:(ctx)=>SafeArea(
-      child:Padding(padding:const EdgeInsets.fromLTRB(22,8,22,26),child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
-        const Text('Chi tiết lịch đặt',style:TextStyle(fontSize:22,fontWeight:FontWeight.bold,color:_purple)),
-        const SizedBox(height:16),
-        Text(fieldNames[b['fieldId']]??b['fieldId']?.toString()??'Sân',style:const TextStyle(fontSize:18,fontWeight:FontWeight.w700)),
-        const SizedBox(height:8),
-        Text('Loại: ${b['bookingType']=='membership'?'Đặt bằng thẻ hội viên':'Đặt sân thường'}'),
-        Text('Trạng thái: ${_status(b)}'),
-        Text('Mã đặt sân: ${b['id']??'-'}'),
-        const SizedBox(height:12),
-        for(final s in _selections(b)) Padding(padding:const EdgeInsets.only(bottom:6),child:Text('${s['date']}  •  ${s['startTime']}–${s['endTime']??'-'}  •  Sân ${(s['courtId']??'1').toString().replaceFirst('court_','')}')),
-        const SizedBox(height:10),
-        Text('Tổng tiền: ${b['bookingType']=='membership'?'0đ (trừ 1 lượt)':"${b['totalPrice']??0}đ"}'),
-        if(_pending(b)) Padding(padding:const EdgeInsets.only(top:10),child:Text(_canPay(b)?_minutesLabel(b):'Đã hết 10 phút giữ chỗ',style:const TextStyle(fontWeight:FontWeight.bold,color:Colors.deepOrange))),
-        if(_canPay(b)) Padding(padding:const EdgeInsets.only(top:12),child:SizedBox(width:double.infinity,child:FilledButton(onPressed:(){Navigator.pop(ctx);_resumePayment(b);},child:const Text('Thanh toán ngay')))),
-        if(_canCancel(b)) ...[
-          const SizedBox(height:18),
-          SizedBox(width:double.infinity,child:OutlinedButton.icon(onPressed:() {Navigator.pop(ctx);_cancel(b);},icon:const Icon(Icons.cancel_outlined),label:const Text('Huỷ lịch đặt'))),
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => _BookingDetailPage(
+        booking: b,
+        venueName: fieldNames[b['fieldId']] ?? b['fieldId']?.toString() ?? 'Sân',
+        imageUrl: fieldImages[b['fieldId']],
+        selections: _selections(b),
+        statusLabel: _status(b),
+        canPay: _canPay(b),
+        canCancel: _canCancel(b),
+        remainingLabel: _pending(b) ? (_canPay(b) ? _minutesLabel(b) : 'Đã hết 10 phút giữ chỗ') : null,
+        onPay: () => _resumePayment(b),
+        onCancel: () => _cancel(b),
+        onRefundRequest: () => _requestRefund(b),
+      ),
+    )).then((_) { if (mounted) refresh(silent:true); });
+  }
+
+  Future<void> _requestRefund(Map<String,dynamic> b) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Yêu cầu huỷ và hoàn tiền'),
+        content: const Text('Nếu gửi yêu cầu trước giờ bắt đầu ít nhất 24 tiếng, bạn đủ điều kiện được hoàn 100% số tiền đã thanh toán. Yêu cầu sẽ chờ xử lý; sân chưa bị huỷ và tiền chưa được hoàn ngay.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Để sau')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Gửi yêu cầu')),
         ],
-        if(!_canCancel(b) && b['status']=='confirmed' && b['bookingType']!='membership')
-          const Padding(padding:EdgeInsets.only(top:12),child:Text('Lịch đã thanh toán: liên hệ sân để được hỗ trợ huỷ hoặc hoàn tiền.',style:TextStyle(color:Colors.black54))),
-      ])),
-    ));
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      final token = await _token();
+      final response = await http.post(
+        Uri.parse('${ApiClient.baseUrl}/bookings/${Uri.encodeComponent(b['id'].toString())}/refund-request'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 15));
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      if (response.statusCode != 200 || data is! Map || data['success'] != true) {
+        throw Exception(data is Map ? data['message']?.toString() ?? 'Không gửi được yêu cầu.' : 'Không gửi được yêu cầu.');
+      }
+      await refresh(silent: true);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã gửi yêu cầu. Lịch vẫn giữ nguyên cho đến khi được xử lý.')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))));
+    }
   }
 
   Widget _bookingCard(Map<String,dynamic> b) {
@@ -289,5 +311,123 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
 
       ]))),
     ])));
+  }
+}
+
+class _BookingDetailPage extends StatelessWidget {
+  final Map<String, dynamic> booking;
+  final String venueName;
+  final String? imageUrl;
+  final List<Map<String, dynamic>> selections;
+  final String statusLabel;
+  final bool canPay, canCancel;
+  final String? remainingLabel;
+  final Future<void> Function() onPay, onCancel, onRefundRequest;
+
+  const _BookingDetailPage({
+    required this.booking, required this.venueName, required this.imageUrl,
+    required this.selections, required this.statusLabel, required this.canPay,
+    required this.canCancel, required this.remainingLabel,
+    required this.onPay, required this.onCancel, required this.onRefundRequest,
+  });
+
+  bool get member => booking['bookingType'] == 'membership';
+  bool get paid => !member && booking['paymentStatus'] == 'paid';
+  bool get requested => booking['refundRequestStatus'] == 'pending';
+  bool get cancelled => ['cancelled', 'expired'].contains(booking['status']);
+  String get price {
+    final value = (num.tryParse(booking['totalPrice']?.toString() ?? '') ?? 0).round();
+    final digits = value.toString().replaceAllMapped(RegExp(r'\\B(?=(\\d{3})+(?!\\d))'), (_) => '.');
+    return '$digits đ';
+  }
+
+  Widget section(String heading, Widget content) => Container(
+    margin: const EdgeInsets.only(bottom: 12),
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: const Color(0xFFEAE6F2))),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(heading, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: _purple)),
+      const SizedBox(height: 14), content,
+    ]),
+  );
+
+  Widget info(String label, String value) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      SizedBox(width: 120, child: Text(label, style: const TextStyle(color: Colors.black54))),
+      Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600))),
+    ]),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final first = selections.isNotEmpty ? selections.first : booking;
+    return Scaffold(
+      backgroundColor: _background,
+      appBar: AppBar(title: const Text('Chi tiết đặt sân', style: TextStyle(color: _purple, fontWeight: FontWeight.w800)),
+        centerTitle: true, backgroundColor: _background, foregroundColor: _purple),
+      body: ListView(padding: const EdgeInsets.all(16), children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(colors: [Color(0xFF35167F), Color(0xFF7452C3)]),
+            borderRadius: BorderRadius.circular(20)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              ClipRRect(borderRadius: BorderRadius.circular(14),
+                child: SizedBox(width: 88, height: 88,
+                  child: imageUrl == null
+                    ? const ColoredBox(color: Color(0xFFEBE5FA), child: Icon(Icons.sports_tennis, size: 38, color: _purple))
+                    : Image.network(imageUrl!, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.sports_tennis, color: Colors.white)))),
+              const SizedBox(width: 14),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(venueName, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Text(member ? 'Đặt bằng thẻ hội viên' : 'Đặt sân thường', style: const TextStyle(color: Colors.white70)),
+              ])),
+            ]),
+            const SizedBox(height: 16),
+            Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(color: Colors.white.withValues(alpha: .16), borderRadius: BorderRadius.circular(12)),
+              child: Row(children: [
+                Icon(cancelled ? Icons.cancel_outlined : Icons.check_circle_outline, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(child: Text(statusLabel, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+              ])),
+          ]),
+        ),
+        const SizedBox(height: 16),
+        if (remainingLabel != null) section('Thời gian thanh toán',
+          Text(remainingLabel!, style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold))),
+        if (requested) section('Yêu cầu đang được xử lý',
+          const Text('Đã tiếp nhận yêu cầu hoàn 100% theo chính sách huỷ trước 24 giờ. Sân vẫn được giữ cho đến khi có kết quả xử lý.')),
+        section('Thông tin đặt sân', Column(children: [
+          info('Mã đặt sân', booking['id']?.toString() ?? '-'),
+          info('Ngày đặt', first['date']?.toString() ?? '-'),
+          for (final s in selections) info('Khung giờ',
+            '${s['date']}  •  ${s['startTime']}–${s['endTime'] ?? '-'}  •  Sân ${(s['courtId'] ?? 'court_1').toString().replaceFirst('court_', '')}'),
+          info('Số khung giờ', '${selections.length}'),
+        ])),
+        section('Thanh toán', Column(children: [
+          info('Hình thức', member ? 'Thẻ hội viên (trừ 1 lượt)' : 'Thanh toán trực tuyến'),
+          info('Trạng thái', booking['paymentStatus']?.toString() ?? '-'),
+          info('Tổng tiền', member ? '0 đ (1 lượt hội viên)' : price),
+        ])),
+        section('Hỗ trợ', const Text('Đơn đã thanh toán: yêu cầu huỷ trước ít nhất 24 giờ được hoàn 100% sau khi xử lý. Dưới 24 giờ không được hoàn tiền theo chính sách này.')),
+        if (canPay) Padding(padding: const EdgeInsets.only(bottom: 12),
+          child: FilledButton.icon(onPressed: () async { Navigator.pop(context); await onPay(); },
+            icon: const Icon(Icons.payment), label: const Text('Thanh toán ngay'),
+            style: FilledButton.styleFrom(backgroundColor: _purple, minimumSize: const Size.fromHeight(48)))),
+        if (canCancel) Padding(padding: const EdgeInsets.only(bottom: 12),
+          child: OutlinedButton.icon(onPressed: () async { Navigator.pop(context); await onCancel(); },
+            icon: const Icon(Icons.cancel_outlined), label: const Text('Huỷ lịch đặt'),
+            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)))),
+        if (paid && !cancelled && !requested) Padding(padding: const EdgeInsets.only(bottom: 12),
+          child: OutlinedButton.icon(onPressed: () async { Navigator.pop(context); await onRefundRequest(); },
+            icon: const Icon(Icons.support_agent), label: const Text('Yêu cầu huỷ / hoàn tiền'),
+            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)))),
+      ]),
+    );
   }
 }
