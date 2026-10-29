@@ -693,7 +693,7 @@ class ExploreScreenState extends State<ExploreScreen> {
                     ),
                     _buildMiniFeature(
                       Icons.check_circle_outline,
-                      'Số lượng',
+                      'Lượt miễn phí',
                       (item['freeSlots'] ?? '').toString(),
                       primary,
                     ),
@@ -923,9 +923,9 @@ class ExploreScreenState extends State<ExploreScreen> {
                               ),
                               _buildMiniFeature(
                                 Icons.check_circle_outline,
-                                'Số lượng',
+                                'Lượt miễn phí',
                                 (item['freeSlots'] ?? '').toString(),
-                                Colors.white,
+                                Colors.amber.shade300,
                               ),
                               _buildMiniFeature(
                                 Icons.sports_golf,
