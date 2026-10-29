@@ -322,7 +322,7 @@ class ExploreScreenState extends State<ExploreScreen> {
                   ),
                 ),
                 Text(
-                  item['postTime'] ?? '',
+                  (item['postTime'] ?? '').toString(),
                   style: const TextStyle(fontSize: 11, color: textSecondary),
                 ),
               ],
@@ -333,7 +333,7 @@ class ExploreScreenState extends State<ExploreScreen> {
               child: AspectRatio(
                 aspectRatio: 16 / 9,
                 child: Image.network(
-                  item['imageUrl'] ?? '',
+                  (item['imageUrl'] ?? '').toString(),
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) => Container(
                     color: const Color(0xFFF3F0FF),
@@ -354,7 +354,7 @@ class ExploreScreenState extends State<ExploreScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              item['title'] ?? '',
+              (item['title'] ?? '').toString(),
               style: const TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
@@ -363,7 +363,7 @@ class ExploreScreenState extends State<ExploreScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              item['content'] ?? '',
+              (item['content'] ?? '').toString(),
               style: const TextStyle(
                 fontSize: 12,
                 color: textSecondary,
@@ -463,7 +463,7 @@ class ExploreScreenState extends State<ExploreScreen> {
                       child: AspectRatio(
                         aspectRatio: 16 / 9,
                         child: Image.network(
-                          item['imageUrl'] ?? '',
+                          (item['imageUrl'] ?? '').toString(),
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) =>
                               Container(
@@ -500,7 +500,7 @@ class ExploreScreenState extends State<ExploreScreen> {
                         ),
                         const Spacer(),
                         Text(
-                          item['postTime'] ?? '',
+                          (item['postTime'] ?? '').toString(),
                           style: const TextStyle(
                             fontSize: 12,
                             color: textSecondary,
@@ -510,7 +510,7 @@ class ExploreScreenState extends State<ExploreScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      item['title'] ?? '',
+                      (item['title'] ?? '').toString(),
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -522,7 +522,7 @@ class ExploreScreenState extends State<ExploreScreen> {
                     const Divider(color: Color(0xFFE5E7EB)),
                     const SizedBox(height: 12),
                     Text(
-                      item['content'] ?? '',
+                      (item['content'] ?? '').toString(),
                       style: const TextStyle(
                         fontSize: 14,
                         color: Colors.black87,
@@ -542,7 +542,7 @@ class ExploreScreenState extends State<ExploreScreen> {
 
   // Thẻ Gói Hội Viên
   Widget _buildMembershipCard(Map<String, dynamic> item) {
-    final String sport = item['sport'] ?? 'Pickleball';
+    final String sport = (item['sport'] ?? 'Pickleball').toString();
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(14),
@@ -562,7 +562,7 @@ class ExploreScreenState extends State<ExploreScreen> {
                   width: 38,
                   height: 38,
                   child: Image.network(
-                    item['logoUrl'] ?? '',
+                    (item['logoUrl'] ?? '').toString(),
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) =>
                         const CircleAvatar(
@@ -583,7 +583,7 @@ class ExploreScreenState extends State<ExploreScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      item['venue'] ?? '',
+                      (item['venue'] ?? '').toString(),
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
@@ -602,7 +602,7 @@ class ExploreScreenState extends State<ExploreScreen> {
                         ),
                         Expanded(
                           child: Text(
-                            item['address'] ?? '',
+                            (item['address'] ?? '').toString(),
                             style: const TextStyle(
                               fontSize: 11,
                               color: textSecondary,
@@ -619,7 +619,7 @@ class ExploreScreenState extends State<ExploreScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            item['postTime'] ?? '',
+            (item['postTime'] ?? '').toString(),
             style: const TextStyle(fontSize: 10, color: textSecondary),
           ),
           const SizedBox(height: 8),
@@ -628,7 +628,7 @@ class ExploreScreenState extends State<ExploreScreen> {
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
           ),
           Text(
-            item['tag'] ?? '#uudaigoihoivien',
+            (item['tag'] ?? '#uudaigoihoivien').toString(),
             style: const TextStyle(
               color: primary,
               fontSize: 11,
@@ -666,7 +666,7 @@ class ExploreScreenState extends State<ExploreScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  item['cardName'] ?? '',
+                  (item['cardName'] ?? '').toString(),
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
@@ -688,13 +688,13 @@ class ExploreScreenState extends State<ExploreScreen> {
                     _buildMiniFeature(
                       Icons.access_time,
                       'Thời hạn',
-                      item['duration'] ?? '',
+                      (item['duration'] ?? '').toString(),
                       primary,
                     ),
                     _buildMiniFeature(
                       Icons.check_circle_outline,
                       'Số lượng',
-                      item['freeSlots'] ?? '',
+                      (item['freeSlots'] ?? '').toString(),
                       primary,
                     ),
                     _buildMiniFeature(
@@ -710,7 +710,7 @@ class ExploreScreenState extends State<ExploreScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      '${_formatMoney(item['price'] ?? 0)} đ',
+                      '${_formatMoney((item['price'] is num) ? (item['price'] as num).toInt() : int.tryParse(item['price']?.toString() ?? '') ?? 0)} đ',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w900,
@@ -897,7 +897,7 @@ class ExploreScreenState extends State<ExploreScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            item['venue'] ?? '',
+                            (item['venue'] ?? '').toString(),
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
@@ -905,7 +905,7 @@ class ExploreScreenState extends State<ExploreScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            item['cardName'] ?? '',
+                            (item['cardName'] ?? '').toString(),
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 16,
@@ -918,19 +918,19 @@ class ExploreScreenState extends State<ExploreScreen> {
                               _buildMiniFeature(
                                 Icons.access_time,
                                 'Thời hạn',
-                                item['duration'] ?? '',
+                                (item['duration'] ?? '').toString(),
                                 Colors.amber.shade300,
                               ),
                               _buildMiniFeature(
                                 Icons.check_circle_outline,
                                 'Số lượng',
-                                item['freeSlots'] ?? '',
+                                (item['freeSlots'] ?? '').toString(),
                                 Colors.white,
                               ),
                               _buildMiniFeature(
                                 Icons.sports_golf,
                                 'Loại sân',
-                                item['sport'] ?? '',
+                                (item['sport'] ?? '').toString(),
                                 Colors.amber.shade300,
                               ),
                             ],
@@ -942,15 +942,15 @@ class ExploreScreenState extends State<ExploreScreen> {
 
                     _buildSectionBox(
                       'Thông tin chương trình',
-                      item['description'] ?? '',
+                      (item['description'] ?? '').toString(),
                     ),
                     _buildSectionBox(
                       'Chính sách chương trình',
-                      item['policy'] ?? '',
+                      (item['policy'] ?? '').toString(),
                     ),
                     _buildSectionBox(
                       'Quyền lợi đi kèm',
-                      item['benefits'] ?? '',
+                      (item['benefits'] ?? '').toString(),
                     ),
                     const SizedBox(height: 12),
 
@@ -1012,7 +1012,7 @@ class ExploreScreenState extends State<ExploreScreen> {
                           style: TextStyle(fontSize: 11, color: textSecondary),
                         ),
                         Text(
-                          '${_formatMoney(item['price'] ?? 0)} đ',
+                          '${_formatMoney((item['price'] is num) ? (item['price'] as num).toInt() : int.tryParse(item['price']?.toString() ?? '') ?? 0)} đ',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
