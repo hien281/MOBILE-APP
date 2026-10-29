@@ -544,7 +544,13 @@ Future<void> _paySePay() async {
               size: 20,
               color: primary,
             ),
-            onPressed: _back,
+            onPressed: () {
+              if (Navigator.of(context, rootNavigator: true).canPop()) {
+                 Navigator.of(context, rootNavigator: true).pop();
+              } else {
+                 Navigator.pop(context);
+              }
+},
           ),
         ),
         body: Container(

@@ -12,6 +12,7 @@ import 'booking.dart';
 import 'field_detail.dart';
 import 'search.dart';
 import 'map_screen.dart';
+import 'explore.dart';
 import '../widgets/bottom_nav.dart';
 
 const Color oliveGreen = Color(0xFF35167F);
@@ -321,7 +322,10 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() { _mapWasOpened = true; _selectedNavIndex = 1; });
       return;
     }
-    if (index == 2) _showComingSoon('Khám phá');
+    if (index == 2) {
+    setState(() => _selectedNavIndex = 2);
+    return;
+    }
     if (index == 3) _showComingSoon('Lịch của tôi');
     if (index == 0) setState(() => _selectedNavIndex = 0);
   }
@@ -359,7 +363,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Scaffold(
         backgroundColor: pageBackground,
         body: IndexedStack(
-          index: _selectedNavIndex == 1 ? 1 : 0,
+          index: _selectedNavIndex,
           children: [
             SafeArea(
         child: LayoutBuilder(
@@ -429,6 +433,9 @@ class _HomeScreenState extends State<HomeScreen> {
               )
             else
               const SizedBox.shrink(),
+            ExploreScreen(
+            accessToken: widget.accessToken,
+          ),  
           ],
         ),
       bottomNavigationBar: SportyBottomNav(
@@ -661,7 +668,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         sport == 'Tennis'
                             ? 'assets/images/icon_tennis.png'
                             : 'assets/images/icon_pickleball.png',
-                        color: selected ? Colors.white : oliveGreen,
+                        color: selected ? Colors.white : const Color(0xFF35167F),
                         errorBuilder: (_, __, ___) => Icon(icon, size: 23,
                           color: selected ? Colors.white : oliveGreen),
                       ),
