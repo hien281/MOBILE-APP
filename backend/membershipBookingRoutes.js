@@ -254,9 +254,10 @@ router.post('/membership-bookings/:id/cancel', requireAuth, async (req,res) => {
       slots.forEach(s=>tx.delete(s.ref));
       const remaining=Number(card.data().remainingSlots)||0;
       const total=Number(card.data().totalSlots)||0;
-      // Restore exactly one use for a confirmed membership booking.
-      tx.update(cardRef,{remainingSlots:Math.min(total,remaining+1)});
-      return {success:true,remainingSlots:Math.min(total,remaining+1)};
+      // A fixed booking consumes one use per scheduled session.
+      const restored = Number.isSafeInteger(b.membershipUses) && b.membershipUses > 0 ? b.membershipUses : 1;
+      tx.update(cardRef,{remainingSlots:Math.min(total,remaining+restored)});
+      return {success:true,remainingSlots:Math.min(total,remaining+restored)};
     });
     if(result.code) return res.status(result.code).json({success:false,message:result.message});
     return res.json(result);
