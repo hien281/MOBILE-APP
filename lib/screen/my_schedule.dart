@@ -204,7 +204,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
       final id=b['id'].toString();
       final path=membership?'membership-bookings':'bookings';
       final endpoint=membership && sessionKey!=null ? '$path/${Uri.encodeComponent(b['id'].toString())}/cancel-session' : '$path/${Uri.encodeComponent(b['id'].toString())}/cancel';
-      final r=await http.post(Uri.parse('${ApiClient.baseUrl}/$path/${Uri.encodeComponent(id)}/cancel'),headers:{'Authorization':'Bearer $token'}).timeout(const Duration(seconds:20));
+      final r=await http.post(Uri.parse('${ApiClient.baseUrl}/$endpoint'),headers:{'Authorization':'Bearer $token','Content-Type':'application/json'},body:membership && sessionKey!=null ? jsonEncode({'date':sessionKey.split('|')[0],'courtId':sessionKey.split('|')[1]}) : null).timeout(const Duration(seconds:20));
       final data=jsonDecode(utf8.decode(r.bodyBytes));
       if(r.statusCode!=200 || data is! Map || data['success']!=true) throw Exception(data is Map ? data['message']?.toString()??'Không thể huỷ lịch.' : 'Không thể huỷ lịch.');
       await refresh(silent:true);
@@ -249,7 +249,8 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
       final token = await _token();
       final response = await http.post(
         Uri.parse('${ApiClient.baseUrl}/bookings/${Uri.encodeComponent(b['id'].toString())}/refund-request'),
-        headers: {'Authorization': 'Bearer $token'},
+        headers: {'Authorization': 'Bearer $token', 'Content-Type':'application/json'},
+        body: b['sessionKey'] != null ? jsonEncode({'sessionKey': b['sessionKey']}) : null,
       ).timeout(const Duration(seconds: 15));
       final data = jsonDecode(utf8.decode(response.bodyBytes));
       if (response.statusCode != 200 || data is! Map || data['success'] != true) {
@@ -360,7 +361,7 @@ class _BookingDetailPage extends StatelessWidget {
 
   bool get member => booking['bookingType'] == 'membership';
   bool get paid => !member && booking['paymentStatus'] == 'paid';
-  bool get requested => booking['refundRequestStatus'] == 'pending';
+  bool get requested => booking['refundRequestStatus'] == 'pending' || (booking['sessionKey'] != null && (booking['refundSessionRequests'] as Map? ?? {}).containsKey(booking['sessionKey']));
   bool get cancelled => ['cancelled', 'expired'].contains(booking['status']);
   String get price {
     final value = (num.tryParse(booking['totalPrice']?.toString() ?? '') ?? 0).round();
