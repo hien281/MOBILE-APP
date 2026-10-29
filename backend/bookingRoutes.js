@@ -585,12 +585,23 @@ router.post('/bookings/:id/refund-request', requireAuth, async (req, res) => {
       if (b.refundRequestStatus) return {code:409, message:'Yêu cầu đã được xử lý trước đó.'};
       const selections = Array.isArray(b.selections) ? b.selections : [];
       const starts = selections.map(s => Date.parse(s.date+'T'+s.startTime+':00+07:00'));
-      if (!starts.length || starts.some(t => !Number.isFinite(t)) || Math.min(...starts) <= Date.now()) {
-        return {code:409, message:'Không thể gửi yêu cầu huỷ sau khi lịch bắt đầu.'};
+      if (!starts.length || starts.some(t => !Number.isFinite(t))) {
+        return {code:409, message:'Đơn thiếu thời gian đặt sân hợp lệ.'};
+      }
+      const hoursUntilStart = (Math.min(...starts) - Date.now()) / 3600000;
+      if (hoursUntilStart < 24) {
+        return {code:409, message:'Chỉ được yêu cầu huỷ và hoàn 100% trước giờ bắt đầu ít nhất 24 tiếng.'};
+      }
+      const refundAmount = Number(b.totalPrice);
+      if (!Number.isFinite(refundAmount) || refundAmount <= 0) {
+        return {code:409, message:'Số tiền thanh toán không hợp lệ.'};
       }
       tx.update(ref, {
         refundRequestStatus:'pending',
         refundRequestedAt:new Date().toISOString(),
+        refundPolicy:'full_before_24h',
+        refundPercent:100,
+        refundAmount,
       });
       return {success:true, status:'pending'};
     });
