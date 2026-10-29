@@ -4,7 +4,7 @@ const { db } = require('./firebase');
 
 const router = express.Router();
 const {
-  createMembershipCard
+  createMembershipCard, membershipLockRef
 } = require('./membershipActivation');
 
 function slotId(fieldId, s) {
@@ -102,6 +102,10 @@ if (bookingId.startsWith('MEM_')) {
     // Đọc tất cả tài liệu trước khi ghi.
     const orderDoc = await tx.get(orderRef);
     const cardDoc = await tx.get(cardRef);
+    const lockRef = orderDoc.exists
+      ? membershipLockRef(db, orderDoc.data().userId, orderDoc.data().membershipId)
+      : null;
+    const lockDoc = lockRef ? await tx.get(lockRef) : null;
 
     if (!orderDoc.exists) return 'not_found';
 
@@ -139,7 +143,9 @@ if (bookingId.startsWith('MEM_')) {
       order.paymentStatus === 'pending' &&
       Number.isFinite(expiryMs) &&
       expiryMs > now.getTime() &&
-      !cardDoc.exists;
+      !cardDoc.exists &&
+      lockDoc?.exists &&
+      lockDoc.data().orderId === orderId;
 
     if (!valid) {
       tx.update(orderRef, {
@@ -161,10 +167,9 @@ if (bookingId.startsWith('MEM_')) {
     });
 
     // Mỗi đơn chỉ kích hoạt được một thẻ.
-    tx.create(
-      cardRef,
-      createMembershipCard(order, orderId, paidAt)
-    );
+    const card = createMembershipCard(order, orderId, paidAt);
+    tx.create(cardRef, card);
+    tx.update(lockRef, { status: 'active', expiresAt: card.expiresAt });
 
     return 'confirmed';
   });
