@@ -282,7 +282,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
     final cancelled=_cancelled(b);
     return Container(
       margin:const EdgeInsets.only(bottom:9),
-      decoration:BoxDecoration(color:Colors.white.withValues(alpha:0.77),borderRadius:BorderRadius.circular(16),border:Border.all(color:const Color(0xFFE8E3F1).withValues(alpha:0.8))),
+      decoration:BoxDecoration(color:Colors.white.withValues(alpha:0.77),borderRadius:BorderRadius.circular(16),border:Border.all(color:const Color(0xFFB7A4DF),width:0.85)),
       child:InkWell(borderRadius:BorderRadius.circular(20),onTap:()=>_details(b),child:Padding(padding:const EdgeInsets.all(11),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
         Row(children:[
           ClipRRect(borderRadius:BorderRadius.circular(13),child:SizedBox(width:78,height:78,child:image==null?Container(color:const Color(0xFFF1EBFA),child:const Icon(Icons.sports_tennis,color:_purple,size:34)):Image.network(image,fit:BoxFit.cover,errorBuilder:(_,__,___)=>Container(color:const Color(0xFFF1EBFA),child:const Icon(Icons.sports_tennis,color:_purple))))),
@@ -294,7 +294,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
             const SizedBox(height:5),
             Text('Sân ${(first['courtId']??'1').toString().replaceFirst('court_','')}${selections.length>1?' • ${selections.length} khung giờ':''}',style:const TextStyle(fontSize:11,color:Colors.black54)),
             const SizedBox(height:5),
-            Container(padding:const EdgeInsets.symmetric(horizontal:8,vertical:3),decoration:BoxDecoration(color:member?const Color(0xFFFFF0BC):const Color(0xFFF0EFF4),borderRadius:BorderRadius.circular(9)),child:Text(member?'Hội viên':'Đặt thường',style:TextStyle(fontSize:10,fontWeight:FontWeight.w700,color:_purple))),
+            Container(padding:const EdgeInsets.symmetric(horizontal:8,vertical:3),decoration:BoxDecoration(color:member?const Color(0xFFFFF0BC):const Color(0xFFECE4FF),borderRadius:BorderRadius.circular(9)),child:Text(member?'Hội viên':'Đặt thường',style:TextStyle(fontSize:10,fontWeight:FontWeight.w700,color:_purple))),
           ])),
         ]),
         const SizedBox(height:10),
@@ -344,25 +344,25 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
       return tab == 1 ? x.compareTo(y) : y.compareTo(x);
     });
     return Scaffold(backgroundColor:_background,body:SafeArea(child:Container(
-      decoration:const BoxDecoration(gradient:LinearGradient(begin:Alignment.topCenter,end:Alignment.bottomCenter,colors:[Color(0xFFFFF9D9),Color(0xFFF3EDFF),Color(0xFFFEFFF7)],stops:[0,0.45,1])),
+      decoration:const BoxDecoration(gradient:LinearGradient(begin:Alignment.topCenter,end:Alignment.bottomCenter,colors:[Color(0xFFE9DEFF),Color(0xFFF3F0F5),Color(0xFFF8F6EA)],stops:[0,0.55,1])),
       child:Column(children:[
       Container(
-        padding:const EdgeInsets.fromLTRB(18,14,18,20),
-        decoration:const BoxDecoration(color:Color(0xFFFFF9DC),borderRadius:BorderRadius.only(bottomLeft:Radius.circular(22),bottomRight:Radius.circular(22))),
+        padding:const EdgeInsets.fromLTRB(20,22,16,20),
+        decoration:const BoxDecoration(color:Color(0xFFF9F8F2),borderRadius:BorderRadius.only(bottomLeft:Radius.circular(22),bottomRight:Radius.circular(22))),
         child:Column(children:[
           Row(children:[
             const Expanded(child:Text('Lịch của tôi',style:TextStyle(fontSize:16,fontWeight:FontWeight.w700,color:_purple))),
             IconButton(onPressed:()=>refresh(),tooltip:'Làm mới',icon:const Icon(Icons.refresh,color:_purple,size:19),visualDensity:VisualDensity.compact,constraints:const BoxConstraints(minWidth:34,minHeight:34)),
           ]),
-          const SizedBox(height:10),
+          const SizedBox(height:14),
           Row(children:[
             for(final item in [(0,'Đã đặt'),(1,'Sắp tới'),(2,'Đã qua'),(3,'Đã huỷ')])
               Expanded(child:Padding(padding:const EdgeInsets.symmetric(horizontal:3),child:ChoiceChip(
-                label:Center(child:Text(item.$2,style:TextStyle(fontSize:11,fontWeight:tab==item.$1?FontWeight.w700:FontWeight.w500,color:tab==item.$1?Colors.white:_purple))),
-                selected:tab==item.$1,selectedColor:_purple,backgroundColor:Colors.white.withValues(alpha:0.68),
-                shape:StadiumBorder(side:BorderSide(color:tab==item.$1?_purple:const Color(0xFFE2DDEB))),
-                side:BorderSide.none,showCheckmark:false,
-                labelPadding:const EdgeInsets.symmetric(horizontal:2),padding:const EdgeInsets.symmetric(vertical:5),
+                label:Center(child:Text(item.$2,style:TextStyle(fontSize:13,fontWeight:tab==item.$1?FontWeight.w700:FontWeight.w500,color:tab==item.$1?Colors.white:_purple))),
+                selected:tab==item.$1,selectedColor:_purple,backgroundColor:Colors.white.withValues(alpha:0.76),
+                shape:const StadiumBorder(),
+                side:BorderSide(color:tab==item.$1?_purple:const Color(0xFFBDB7C8),width:0.85),showCheckmark:false,
+                labelPadding:const EdgeInsets.symmetric(horizontal:1),padding:const EdgeInsets.symmetric(vertical:9),
                 onSelected:(_)=>setState(()=>tab=item.$1)))),
           ]),
         ]),
@@ -373,12 +373,12 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
         if(orderIds.isEmpty && !loading) const Padding(padding:EdgeInsets.all(30),child:Center(child:Text('Chưa có lịch đặt trong mục này.'))),
         for (final orderId in orderIds)
           Container(
-            margin: const EdgeInsets.only(bottom: 12),
+            margin: const EdgeInsets.only(bottom: 5),
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: const Color(0xFFF5F1FC).withValues(alpha:0.60),
+              color: const Color(0xFFF5F1FC).withValues(alpha:0.66),
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: const Color(0xFFE6DEF6).withValues(alpha:0.75)),
+              border: Border.all(color: const Color(0xFFB7A4DF),width:0.85),
             ),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Padding(
@@ -397,13 +397,13 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(4, 0, 4, 7),
                   child: Text('Buổi ${_sessions(bookings.firstWhere((b) => b['id']?.toString() == orderId)).indexWhere((s) => s['sessionKey'] == grouped[orderId]![i]['sessionKey']) + 1}',
-                    style: const TextStyle(color: _purple, fontSize: 11, fontWeight: FontWeight.bold)),
+                    style: const TextStyle(color: Color(0xFF85818D), fontSize: 10, fontWeight: FontWeight.w400)),
                 ),
                 _bookingCard(grouped[orderId]![i]),
-                if(i < grouped[orderId]!.length-1) const Padding(padding:EdgeInsets.fromLTRB(8,0,8,13),child:Divider(height:1,thickness:1,color:Color(0xFFDCD8E5))),
               ],
             ]),
           ),
+          if(orderId != orderIds.last) const Padding(padding:EdgeInsets.fromLTRB(8,5,8,15),child:Divider(height:1,thickness:1,color:Color(0xFFC6C1CB))),
 
       ]))),
     ]))));
