@@ -1,0 +1,104 @@
+const express = require('express');
+const { db } = require('./firebase');
+const { requireAuth } = require('./authMiddleware');
+const router = express.Router();
+
+const dateOK = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s + 'T00:00:00Z')) && new Date(s + 'T00:00:00Z').toISOString().slice(0, 10) === s;
+const slotKey = (f,c,d,t) => `${f}_${c}_${d}_${t.replace(':','-')}`;
+const expiredHold = (s,now) => s.status === 'held' && Number.isFinite(Date.parse(s.expiresAt)) && Date.parse(s.expiresAt) <= now;
+
+function allowedByPackage(packageData, date, times) {
+  const rule = String(packageData.applyTime || '').trim();
+  // Fail closed if package has an unfamiliar restriction.
+  if (!rule) return false;
+  const window = rule.match(/(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})/);
+  if (!window) return false;
+  const start = Number(window[1])*60 + Number(window[2]);
+  const end = Number(window[3])*60 + Number(window[4]);
+  if (times.some(t => {const m = Number(t.slice(0,2))*60; return m < start || m+60 > end;})) return false;
+  const day = new Date(date + 'T00:00:00Z').getUTCDay();
+  const lower = rule.toLowerCase();
+  if (/thứ\s*2\s*[-–]\s*thứ\s*6/.test(lower) && (day === 0 || day === 6)) return false;
+  if (/thứ\s*2\s*[-–]\s*thứ\s*7/.test(lower) && day === 0) return false;
+  // Unknown weekday text must not silently grant access.
+  if (/thứ|chủ nhật/.test(lower) && !/thứ\s*2\s*[-–]\s*thứ\s*[67]/.test(lower)) return false;
+  return true;
+}
+
+router.get('/my-memberships', requireAuth, async (req,res) => {
+  try {
+    const snap = await db.collection('user_memberships').where('userId','==',req.user.id).get();
+    const memberships = snap.docs.map(d => ({id:d.id,...d.data()}));
+    return res.json({success:true,memberships});
+  } catch(e) { console.error(e); return res.status(500).json({success:false,message:'Không tải được thẻ hội viên.'}); }
+});
+
+router.get('/my-bookings', requireAuth, async (req,res) => {
+  try {
+    const snap = await db.collection('bookings').where('userId','==',req.user.id).get();
+    const bookings = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+    return res.json({success:true,bookings});
+  } catch(e) { console.error(e); return res.status(500).json({success:false,message:'Không tải được lịch đặt sân.'}); }
+});
+
+router.post('/membership-bookings', requireAuth, async (req,res) => {
+  try {
+    const {membershipCardId,fieldId,selections} = req.body || {};
+    if (typeof membershipCardId !== 'string' || !/^[\w-]{1,128}$/.test(membershipCardId) ||
+        typeof fieldId !== 'string' || !/^[\w-]{1,128}$/.test(fieldId) ||
+        !Array.isArray(selections) || selections.length < 1 || selections.length > 3) {
+      return res.status(400).json({success:false,message:'Chọn 1 đến 3 giờ liên tiếp trên cùng một sân.'});
+    }
+    const [first] = selections;
+    if (!first || !dateOK(first.date) || !/^court_[1-9]\d*$/.test(first.courtId)) return res.status(400).json({success:false,message:'Ngày hoặc sân không hợp lệ.'});
+    const times = selections.map(s=>s.startTime);
+    if (selections.some(s=>s.date !== first.date || s.courtId !== first.courtId || !/^([01]\d|2[0-3]):00$/.test(s.startTime)) || new Set(times).size !== times.length) return res.status(400).json({success:false,message:'Các giờ phải thuộc cùng ngày và sân.'});
+    times.sort();
+    if (times.some((t,i)=>i && Number(t.slice(0,2)) !== Number(times[i-1].slice(0,2))+1)) return res.status(400).json({success:false,message:'Chỉ được chọn giờ liên tiếp.'});
+    const now = Date.now();
+    const nowVN = new Date(now+7*3600000).toISOString().slice(0,16);
+    if (first.date+'T'+times[0] <= nowVN) return res.status(400).json({success:false,message:'Không thể đặt giờ đã qua.'});
+    const cardRef=db.collection('user_memberships').doc(membershipCardId);
+    const fieldRef=db.collection('fields').doc(fieldId);
+    const bookingRef=db.collection('bookings').doc();
+    const slotRefs=times.map(t=>db.collection('booking_slots').doc(slotKey(fieldId,first.courtId,first.date,t)));
+    const legacyRefs=times.map(t=>db.collection('booking_slots').doc(`${fieldId}_${first.date}_${t.replace(':','-')}`));
+    const result=await db.runTransaction(async tx=>{
+      const [cardDoc,fieldDoc]=await Promise.all([tx.get(cardRef),tx.get(fieldRef)]);
+      if (!cardDoc.exists || cardDoc.data().userId !== req.user.id) return {code:404,message:'Không tìm thấy thẻ hội viên.'};
+      if (!fieldDoc.exists) return {code:404,message:'Không tìm thấy sân.'};
+      const card=cardDoc.data(), field=fieldDoc.data();
+      if (card.status !== 'active' || !Number.isSafeInteger(card.remainingSlots) || card.remainingSlots < 1) return {code:409,message:'Thẻ đã hết lượt hoặc không hoạt động.'};
+      const startMs=Date.parse(first.date+'T'+times[0]+':00+07:00');
+      const endMs=startMs+times.length*3600000;
+      if (!Number.isFinite(Date.parse(card.activatedAt)) || !Number.isFinite(Date.parse(card.expiresAt)) || startMs < Date.parse(card.activatedAt) || endMs > Date.parse(card.expiresAt)) return {code:409,message:'Ngày đặt nằm ngoài thời hạn hội viên.'};
+      if (!card.fieldId || card.fieldId !== fieldId) return {code:403,message:'Thẻ không áp dụng cho sân này.'};
+      const packageDoc=await tx.get(db.collection('memberships').doc(card.membershipId));
+      if (!packageDoc.exists || !allowedByPackage(packageDoc.data(),first.date,times)) return {code:403,message:'Khung giờ không thuộc quyền lợi gói hội viên.'};
+      const courtCount=Number(field.courtCount)||1;
+      if (Number(first.courtId.slice(6))>courtCount) return {code:400,message:'Sân con không hợp lệ.'};
+      const open=String(field.openingTime||'06:00'), close=String(field.closingTime||'22:00');
+      if (times.some(t=>t<open || (Number(t.slice(0,2))+1)*60 > Number(close.slice(0,2))*60+Number(close.slice(3,5)))) return {code:400,message:'Ngoài giờ hoạt động.'};
+      const [slotDocs,legacyDocs]=await Promise.all([Promise.all(slotRefs.map(r=>tx.get(r))),Promise.all(legacyRefs.map(r=>tx.get(r)))]);
+      if (legacyDocs.some(d=>d.exists)) return {code:409,message:'Khung giờ đã có lịch đặt.'};
+      const owners=new Map();
+      for(const d of slotDocs) if(d.exists) {
+        const s=d.data();
+        if(!expiredHold(s,now) || !s.bookingId) return {code:409,message:'Khung giờ đã được đặt.'};
+        owners.set(s.bookingId,db.collection('bookings').doc(s.bookingId));
+      }
+      const ownerDocs=await Promise.all([...owners.values()].map(r=>tx.get(r)));
+      if(ownerDocs.some(d=>!d.exists || d.data().status!=='pending_payment' || Date.parse(d.data().expiresAt)>now)) return {code:409,message:'Khung giờ đang được thanh toán.'};
+      ownerDocs.forEach(d=>tx.update(d.ref,{status:'expired',paymentStatus:'expired'}));
+      const createdAt=new Date(now).toISOString();
+      const booking={fieldId,userId:req.user.id,bookingType:'membership',membershipCardId,membershipId:card.membershipId,selections:times.map(t=>({date:first.date,courtId:first.courtId,startTime:t,endTime:String(Number(t.slice(0,2))+1).padStart(2,'0')+':00'})),totalPrice:0,status:'confirmed',paymentStatus:'paid',createdAt,confirmedAt:createdAt};
+      tx.create(bookingRef,booking);
+      slotRefs.forEach((r,i)=>tx.set(r,{bookingId:bookingRef.id,fieldId,date:first.date,courtId:first.courtId,startTime:times[i],status:'booked'}));
+      tx.update(cardRef,{remainingSlots:card.remainingSlots-1});
+      return {success:true,bookingId:bookingRef.id,remainingSlots:card.remainingSlots-1,booking};
+    });
+    if(result.code) return res.status(result.code).json({success:false,message:result.message});
+    return res.status(201).json(result);
+  } catch(e) {console.error('Membership booking:',e);return res.status(500).json({success:false,message:'Không thể đặt sân bằng thẻ.'});}
+});
+module.exports=router;
