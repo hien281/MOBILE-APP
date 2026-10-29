@@ -14,6 +14,7 @@ import 'search.dart';
 import 'map_screen.dart';
 import 'explore.dart';
 import 'my_schedule.dart';
+import 'account_screen.dart';
 import '../widgets/bottom_nav.dart';
 
 const Color oliveGreen = Color(0xFF35167F);
@@ -316,7 +317,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onNavTap(int index) {
     if (index == 4) {
-      _showAccountDialog();
+      setState(() => _selectedNavIndex = 4);
       return;
     }
     if (index == 1) {
@@ -437,7 +438,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ExploreScreen(
             accessToken: widget.accessToken,
           ),
-          const MyScheduleScreen(),  
+          const MyScheduleScreen(),
+          const AccountScreen(),
           ],
         ),
       bottomNavigationBar: SportyBottomNav(
