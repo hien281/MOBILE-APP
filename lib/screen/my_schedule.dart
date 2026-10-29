@@ -29,7 +29,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
   void initState() {
     super.initState();
     _startTimer();
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) { if (mounted && widget.isActive) setState(() {}); });
+    _countdownTimer = Timer.periodic(const Duration(seconds: 15), (_) { if (mounted && widget.isActive) setState(() {}); });
     refresh();
   }
 
@@ -144,9 +144,10 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
 
   bool _pending(Map<String,dynamic> b) => b['status']=='pending_payment' && b['paymentStatus']=='pending';
   bool _canPay(Map<String,dynamic> b) => _pending(b) && _remaining(b)>Duration.zero;
-  String _countdownLabel(Map<String,dynamic> b) {
+  String _minutesLabel(Map<String,dynamic> b) {
     final seconds=_remaining(b).inSeconds;
-    return '${(seconds~/60).toString().padLeft(2,'0')}:${(seconds%60).toString().padLeft(2,'0')}';
+    final minutes=(seconds+59)~/60;
+    return 'Còn $minutes phút để thanh toán';
   }
   Future<void> _resumePayment(Map<String,dynamic> b) async {
     if(!_canPay(b)) return;
@@ -200,7 +201,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
         for(final s in _selections(b)) Padding(padding:const EdgeInsets.only(bottom:6),child:Text('${s['date']}  •  ${s['startTime']}–${s['endTime']??'-'}  •  Sân ${(s['courtId']??'1').toString().replaceFirst('court_','')}')),
         const SizedBox(height:10),
         Text('Tổng tiền: ${b['bookingType']=='membership'?'0đ (trừ 1 lượt)':"${b['totalPrice']??0}đ"}'),
-        if(_pending(b)) Padding(padding:const EdgeInsets.only(top:10),child:Text(_canPay(b)?'Còn ${_countdownLabel(b)} để thanh toán':'Đã hết 10 phút giữ chỗ',style:const TextStyle(fontWeight:FontWeight.bold,color:Colors.deepOrange))),
+        if(_pending(b)) Padding(padding:const EdgeInsets.only(top:10),child:Text(_canPay(b)?_minutesLabel(b):'Đã hết 10 phút giữ chỗ',style:const TextStyle(fontWeight:FontWeight.bold,color:Colors.deepOrange))),
         if(_canPay(b)) Padding(padding:const EdgeInsets.only(top:12),child:SizedBox(width:double.infinity,child:FilledButton(onPressed:(){Navigator.pop(ctx);_resumePayment(b);},child:const Text('Thanh toán ngay')))),
         if(_canCancel(b)) ...[
           const SizedBox(height:18),
@@ -243,7 +244,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
           for(final s in _selections(b).take(3)) Text('${s['date']}  •  ${s['startTime']}–${s['endTime']??'-'}  •  Sân ${(s['courtId']??'1').toString().replaceFirst('court_','')}',style:const TextStyle(fontSize:12)),
           if(_selections(b).length>3) Text('Và ${_selections(b).length-3} khung giờ khác...',style:const TextStyle(fontSize:12)),
           const SizedBox(height:8),
-          if(_pending(b)) Text(_canPay(b)?'Còn ${_countdownLabel(b)} để thanh toán':'Đã hết 10 phút giữ chỗ',style:const TextStyle(color:Colors.deepOrange,fontWeight:FontWeight.w600,fontSize:12)),
+          if(_pending(b)) Text(_canPay(b)?_minutesLabel(b):'Đã hết 10 phút giữ chỗ',style:const TextStyle(color:Colors.deepOrange,fontWeight:FontWeight.w600,fontSize:12)),
           if(_canPay(b)) Align(alignment:Alignment.centerRight,child:TextButton.icon(onPressed:()=>_resumePayment(b),icon:const Icon(Icons.payment,size:16),label:const Text('Thanh toán ngay'))),
           Row(children:[Icon(_cancelled(b)?Icons.cancel_outlined:Icons.check_circle_outline,size:15,color:_purple),const SizedBox(width:5),Expanded(child:Text(_status(b),style:const TextStyle(fontSize:12,color:_purple))),const Text('Xem chi tiết ›',style:TextStyle(fontSize:12,color:_purple))]),
         ])))),
