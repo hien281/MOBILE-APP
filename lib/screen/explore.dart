@@ -2,17 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
+
 import 'dart:convert';
+
 import '../api_client.dart';
-import 'payment_screen.dart';
+import 'membership_payment_screen.dart';
 
 class ExploreScreen extends StatefulWidget {
   final String accessToken;
 
-  const ExploreScreen({
-    super.key,
-    required this.accessToken,
-  });
+  const ExploreScreen({super.key, required this.accessToken});
 
   @override
   State<ExploreScreen> createState() => ExploreScreenState();
@@ -26,23 +25,16 @@ class ExploreScreenState extends State<ExploreScreen> {
 
   // 3 Banner phân khu cố định theo môn thể thao
   final Map<String, String> _sportBanners = {
-    'Pickleball':
-        'https://static.foxnews.com/foxnews.com/content/uploads/2024/07/pickleball-paddle-court.jpg',
-    'Cầu lông':
-        'https://cdn2.fptshop.com.vn/unsafe/1920x0/filters:format(webp):quality(75)/Cau_long_tieng_Anh_la_gi_cover_ce00312387.png',
-    'Bóng đá':
-        'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSadgiHiVWw2W7RLErXymZJ9B4V9mAz68Pr-y8VaKxU9I8HDVyzNYeZtueS&s=10',
+    'Pickleball': 'https://static.foxnews.com/foxnews.com/content/uploads/2024/07/pickleball-paddle-court.jpg',
+    'Cầu lông': 'https://cdn2.fptshop.com.vn/unsafe/1920x0/filters:format(webp):quality(75)/Cau_long_tieng_Anh_la_gi_cover_ce00312387.png',
+    'Bóng đá': 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSadgiHiVWw2W7RLErXymZJ9B4V9mAz68Pr-y8VaKxU9I8HDVyzNYeZtueS&s=10',
   };
 
   String _selectedCategory = 'Tất cả';
   bool _loading = false;
   List<Map<String, dynamic>> _items = [];
 
-  final List<String> _categories = [
-    'Tất cả',
-    'Sự kiện',
-    'Gói hội viên',
-  ];
+  final List<String> _categories = ['Tất cả', 'Sự kiện', 'Gói hội viên'];
 
   @override
   void initState() {
@@ -106,11 +98,9 @@ class ExploreScreenState extends State<ExploreScreen> {
           'duration': '1 Tháng',
           'freeSlots': '30',
           'sport': 'Pickleball',
-          'logoUrl':
-              'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&w=150&q=80',
+          'logoUrl': 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&w=150&q=80',
           'price': 850000,
-          'description':
-              'Gói tập tự do khung giờ sáng và trưa tại Swin Pickleball dành cho hội viên.',
+          'description': 'Gói tập tự do khung giờ sáng và trưa tại Swin Pickleball dành cho hội viên.',
           'policy': 'Thẻ có hiệu lực 30 ngày kể từ ngày kích hoạt.',
           'benefits': 'Miễn phí mượn bóng và vợt tập.',
         },
@@ -129,9 +119,9 @@ class ExploreScreenState extends State<ExploreScreen> {
 
   String _formatMoney(int amount) {
     return amount.toString().replaceAllMapped(
-          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-          (m) => '${m[1]}.',
-        );
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]}.',
+    );
   }
 
   @override
@@ -156,7 +146,10 @@ class ExploreScreenState extends State<ExploreScreen> {
                   return GestureDetect(
                     onTap: () => setState(() => _selectedCategory = cat),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: isSelected ? primary : Colors.white,
                         borderRadius: BorderRadius.circular(20),
@@ -168,7 +161,9 @@ class ExploreScreenState extends State<ExploreScreen> {
                         cat,
                         style: TextStyle(
                           color: isSelected ? Colors.white : Colors.black87,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.w500,
                           fontSize: 13,
                         ),
                       ),
@@ -181,7 +176,9 @@ class ExploreScreenState extends State<ExploreScreen> {
             // Danh sách hiển thị
             Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator(color: primary))
+                  ? const Center(
+                      child: CircularProgressIndicator(color: primary),
+                    )
                   : RefreshIndicator(
                       onRefresh: _fetchExploreData,
                       child: _selectedCategory == 'Tất cả'
@@ -227,14 +224,18 @@ class ExploreScreenState extends State<ExploreScreen> {
                     child: Image.network(
                       bannerUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                      errorBuilder: (context, error, stackTrace) =>
+                          const SizedBox.shrink(),
                     ),
                   ),
                 ),
               ),
             ],
             ...sportItems.map((item) {
-              final cat = (item['category'] ?? '').toString().trim().toLowerCase();
+              final cat = (item['category'] ?? '')
+                  .toString()
+                  .trim()
+                  .toLowerCase();
               if (cat == 'sự kiện' || cat == 'event') {
                 return _buildEventNewsCard(item);
               }
@@ -343,7 +344,11 @@ class ExploreScreenState extends State<ExploreScreen> {
             const SizedBox(height: 6),
             Text(
               item['content'] ?? '',
-              style: const TextStyle(fontSize: 12, color: textSecondary, height: 1.4),
+              style: const TextStyle(
+                fontSize: 12,
+                color: textSecondary,
+                height: 1.4,
+              ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
@@ -357,7 +362,10 @@ class ExploreScreenState extends State<ExploreScreen> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                 ),
                 onPressed: () => _showEventDetail(context, item),
                 icon: const Text(
@@ -391,7 +399,10 @@ class ExploreScreenState extends State<ExploreScreen> {
           child: Column(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 decoration: const BoxDecoration(
                   color: primary,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -399,7 +410,11 @@ class ExploreScreenState extends State<ExploreScreen> {
                 child: Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 18),
+                      icon: const Icon(
+                        Icons.arrow_back_ios,
+                        color: Colors.white,
+                        size: 18,
+                      ),
                       onPressed: () => Navigator.of(modalCtx).pop(),
                     ),
                     const Expanded(
@@ -430,10 +445,15 @@ class ExploreScreenState extends State<ExploreScreen> {
                         child: Image.network(
                           item['imageUrl'] ?? '',
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => Container(
-                            color: const Color(0xFFF3F0FF),
-                            child: const Icon(Icons.sports_score, color: primary, size: 48),
-                          ),
+                          errorBuilder: (context, error, stackTrace) =>
+                              Container(
+                                color: const Color(0xFFF3F0FF),
+                                child: const Icon(
+                                  Icons.sports_score,
+                                  color: primary,
+                                  size: 48,
+                                ),
+                              ),
                         ),
                       ),
                     ),
@@ -441,7 +461,10 @@ class ExploreScreenState extends State<ExploreScreen> {
                     Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFF3F0FF),
                             borderRadius: BorderRadius.circular(12),
@@ -458,7 +481,10 @@ class ExploreScreenState extends State<ExploreScreen> {
                         const Spacer(),
                         Text(
                           item['postTime'] ?? '',
-                          style: const TextStyle(fontSize: 12, color: textSecondary),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: textSecondary,
+                          ),
                         ),
                       ],
                     ),
@@ -477,7 +503,11 @@ class ExploreScreenState extends State<ExploreScreen> {
                     const SizedBox(height: 12),
                     Text(
                       item['content'] ?? '',
-                      style: const TextStyle(fontSize: 14, color: Colors.black87, height: 1.6),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.black87,
+                        height: 1.6,
+                      ),
                     ),
                     const SizedBox(height: 20),
                   ],
@@ -514,11 +544,16 @@ class ExploreScreenState extends State<ExploreScreen> {
                   child: Image.network(
                     item['logoUrl'] ?? '',
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => const CircleAvatar(
-                      radius: 19,
-                      backgroundColor: primary,
-                      child: Icon(Icons.sports_tennis, color: Colors.white, size: 18),
-                    ),
+                    errorBuilder: (context, error, stackTrace) =>
+                        const CircleAvatar(
+                          radius: 19,
+                          backgroundColor: primary,
+                          child: Icon(
+                            Icons.sports_tennis,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                        ),
                   ),
                 ),
               ),
@@ -548,7 +583,10 @@ class ExploreScreenState extends State<ExploreScreen> {
                         Expanded(
                           child: Text(
                             item['address'] ?? '',
-                            style: const TextStyle(fontSize: 11, color: textSecondary),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: textSecondary,
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -571,7 +609,11 @@ class ExploreScreenState extends State<ExploreScreen> {
           ),
           Text(
             item['tag'] ?? '#uudaigoihoivien',
-            style: const TextStyle(color: primary, fontSize: 11, fontWeight: FontWeight.bold),
+            style: const TextStyle(
+              color: primary,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 10),
           Container(
@@ -585,7 +627,10 @@ class ExploreScreenState extends State<ExploreScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: primary,
                     borderRadius: BorderRadius.circular(12),
@@ -620,9 +665,24 @@ class ExploreScreenState extends State<ExploreScreen> {
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    _buildMiniFeature(Icons.access_time, 'Thời hạn', item['duration'] ?? '', primary),
-                    _buildMiniFeature(Icons.check_circle_outline, 'Miễn phí', item['freeSlots'] ?? '', primary),
-                    _buildMiniFeature(Icons.sports_golf, 'Loại sân', sport, primary),
+                    _buildMiniFeature(
+                      Icons.access_time,
+                      'Thời hạn',
+                      item['duration'] ?? '',
+                      primary,
+                    ),
+                    _buildMiniFeature(
+                      Icons.check_circle_outline,
+                      'Số lượng',
+                      item['freeSlots'] ?? '',
+                      primary,
+                    ),
+                    _buildMiniFeature(
+                      Icons.sports_golf,
+                      'Loại sân',
+                      sport,
+                      primary,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -644,12 +704,18 @@ class ExploreScreenState extends State<ExploreScreen> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                       ),
                       onPressed: () => _showMembershipDetail(context, item),
                       icon: const Text(
                         'Đăng ký',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
                       ),
                       label: const Icon(Icons.chevron_right, size: 16),
                     ),
@@ -663,7 +729,12 @@ class ExploreScreenState extends State<ExploreScreen> {
     );
   }
 
-  Widget _buildMiniFeature(IconData icon, String label, String val, Color color) {
+  Widget _buildMiniFeature(
+    IconData icon,
+    String label,
+    String val,
+    Color color,
+  ) {
     return Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -681,18 +752,62 @@ class ExploreScreenState extends State<ExploreScreen> {
           const SizedBox(height: 2),
           Text(
             val,
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
           ),
         ],
       ),
     );
   }
 
+  Future<Map<String, dynamic>> _createMembershipOrder(
+    String membershipId,
+  ) async {
+    final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+
+    if (token == null || token.isEmpty) {
+      throw Exception('Vui lòng đăng nhập để mua thẻ.');
+    }
+
+    final response = await http
+        .post(
+          Uri.parse('${ApiClient.baseUrl}/membership-orders'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({'membershipId': membershipId}),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    final data = jsonDecode(utf8.decode(response.bodyBytes));
+
+    if (data is! Map || data['success'] != true) {
+      throw Exception(
+        data is Map
+            ? (data['message'] ?? 'Không thể tạo đơn hội viên.')
+            : 'Phản hồi backend không hợp lệ.',
+      );
+    }
+
+    return Map<String, dynamic>.from(data);
+  }
+
   // Modal Chi Tiết Thẻ Hội Viên & Thanh Toán
-  void _showMembershipDetail(BuildContext parentContext, Map<String, dynamic> item) {
+  void _showMembershipDetail(
+    BuildContext parentContext,
+    Map<String, dynamic> item,
+  ) {
     final currentUser = FirebaseAuth.instance.currentUser;
-    final nameController = TextEditingController(text: currentUser?.displayName ?? '');
-    final phoneController = TextEditingController(text: currentUser?.phoneNumber ?? '');
+    final nameController = TextEditingController(
+      text: currentUser?.displayName ?? '',
+    );
+    final phoneController = TextEditingController(
+      text: currentUser?.phoneNumber ?? '',
+    );
 
     showModalBottomSheet(
       context: parentContext,
@@ -711,7 +826,10 @@ class ExploreScreenState extends State<ExploreScreen> {
             children: [
               // Header Modal
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 decoration: const BoxDecoration(
                   color: primary,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -719,7 +837,11 @@ class ExploreScreenState extends State<ExploreScreen> {
                 child: Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 18),
+                      icon: const Icon(
+                        Icons.arrow_back_ios,
+                        color: Colors.white,
+                        size: 18,
+                      ),
                       onPressed: () => Navigator.of(modalCtx).pop(),
                     ),
                     const Expanded(
@@ -756,7 +878,10 @@ class ExploreScreenState extends State<ExploreScreen> {
                         children: [
                           Text(
                             item['venue'] ?? '',
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           const SizedBox(height: 4),
                           Text(
@@ -770,9 +895,24 @@ class ExploreScreenState extends State<ExploreScreen> {
                           const SizedBox(height: 10),
                           Row(
                             children: [
-                              _buildMiniFeature(Icons.access_time, 'Thời hạn', item['duration'] ?? '', Colors.amber.shade300),
-                              _buildMiniFeature(Icons.check_circle_outline, 'Miễn phí', item['freeSlots'] ?? '', Colors.white),
-                              _buildMiniFeature(Icons.sports_golf, 'Loại sân', item['sport'] ?? '', Colors.amber.shade300),
+                              _buildMiniFeature(
+                                Icons.access_time,
+                                'Thời hạn',
+                                item['duration'] ?? '',
+                                Colors.amber.shade300,
+                              ),
+                              _buildMiniFeature(
+                                Icons.check_circle_outline,
+                                'Miễn phí',
+                                item['freeSlots'] ?? '',
+                                Colors.white,
+                              ),
+                              _buildMiniFeature(
+                                Icons.sports_golf,
+                                'Loại sân',
+                                item['sport'] ?? '',
+                                Colors.amber.shade300,
+                              ),
                             ],
                           ),
                         ],
@@ -780,9 +920,18 @@ class ExploreScreenState extends State<ExploreScreen> {
                     ),
                     const SizedBox(height: 12),
 
-                    _buildSectionBox('Thông tin chương trình', item['description'] ?? ''),
-                    _buildSectionBox('Chính sách chương trình', item['policy'] ?? ''),
-                    _buildSectionBox('Quyền lợi đi kèm', item['benefits'] ?? ''),
+                    _buildSectionBox(
+                      'Thông tin chương trình',
+                      item['description'] ?? '',
+                    ),
+                    _buildSectionBox(
+                      'Chính sách chương trình',
+                      item['policy'] ?? '',
+                    ),
+                    _buildSectionBox(
+                      'Quyền lợi đi kèm',
+                      item['benefits'] ?? '',
+                    ),
                     const SizedBox(height: 12),
 
                     Container(
@@ -796,7 +945,10 @@ class ExploreScreenState extends State<ExploreScreen> {
                         children: [
                           const Text(
                             'Thông tin khách hàng',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
                           ),
                           const SizedBox(height: 10),
                           TextField(
@@ -835,7 +987,10 @@ class ExploreScreenState extends State<ExploreScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text('Tổng tiền', style: TextStyle(fontSize: 11, color: textSecondary)),
+                        const Text(
+                          'Tổng tiền',
+                          style: TextStyle(fontSize: 11, color: textSecondary),
+                        ),
                         Text(
                           '${_formatMoney(item['price'] ?? 0)} đ',
                           style: const TextStyle(
@@ -849,68 +1004,76 @@ class ExploreScreenState extends State<ExploreScreen> {
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: primary,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 12,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                       onPressed: () async {
-                        // 1. Tạo mã đơn hàng tạm chuẩn format MEM...
-                        String validBookingId = 'MEM${DateTime.now().millisecondsSinceEpoch}';
-
-                        // 2. Gọi API gửi thông tin đơn hàng lưu vào Backend/Firestore trước
                         try {
-                          final response = await http.post(
-                            Uri.parse('${ApiClient.baseUrl}/bookings'),
-                            headers: {
-                              'Content-Type': 'application/json',
-                              if (widget.accessToken.isNotEmpty)
-                                'Authorization': 'Bearer ${widget.accessToken}',
-                            },
-                            body: jsonEncode({
-                              'id': validBookingId,
-                              'bookingId': validBookingId,
-                              'fieldName': '${item['venue']} - ${item['cardName']}',
-                              'courtId': item['venue'] ?? 'Swin Pickleball',
-                              'date': item['openSale'] ?? '01/11/2026',
-                              'startTime': item['applyTime'] ?? '06:00 - 16:00',
-                              'totalPrice': item['price'] ?? 850000,
-                              'price': item['price'] ?? 850000,
-                              'status': 'PENDING',
-                              'paymentStatus': 'PENDING',
-                            }),
+                          final membershipId = item['id']?.toString() ?? '';
+
+                          if (membershipId.isEmpty) {
+                            throw Exception('Không tìm thấy mã gói hội viên.');
+                          }
+
+                          final order = await _createMembershipOrder(
+                            membershipId,
                           );
-                          debugPrint('Tạo đơn tạm Backend Response: ${response.statusCode} - ${response.body}');
-                        } catch (e) {
-                          debugPrint('Lỗi tạo đơn tạm Backend: $e');
-                        }
 
-                        // 3. Đóng Modal chi tiết thẻ
-                        if (modalCtx.mounted) Navigator.of(modalCtx).pop();
+                          final orderId = order['orderId']?.toString();
+                          final totalPrice = (order['totalPrice'] as num?)
+                              ?.toInt();
+                          final expiresAt = DateTime.tryParse(
+                            order['expiresAt']?.toString() ?? '',
+                          );
 
-                        // 4. Mở PaymentScreen bằng rootNavigator để không bị dính AppBar/Nav kẹt
-                        if (parentContext.mounted) {
+                          if (orderId == null ||
+                              orderId.isEmpty ||
+                              totalPrice == null ||
+                              expiresAt == null) {
+                            throw Exception(
+                              'Dữ liệu đơn hội viên không hợp lệ.',
+                            );
+                          }
+
+                          if (modalCtx.mounted) {
+                            Navigator.of(modalCtx).pop();
+                          }
+                          if (parentContext.mounted) {
                           Navigator.of(parentContext, rootNavigator: true).push(
                             MaterialPageRoute(
-                              builder: (_) => PaymentScreen(
-                                bookingId: validBookingId,
-                                fieldName: '${item['venue']} - ${item['cardName']}',
-                                totalPrice: item['price'] ?? 850000,
-                                expiresAt: DateTime.now().add(const Duration(minutes: 15)),
+                              builder: (_) => MembershipPaymentScreen(
+                                orderId: orderId,
+                                membershipName:
+                                    order['membershipName']?.toString() ??
+                                    item['cardName']?.toString() ??
+                                    'Thẻ hội viên',
+                                totalPrice: totalPrice,
+                                expiresAt: expiresAt,
                                 baseUrl: ApiClient.baseUrl,
-                                selections: [
-                                  {
-                                    'date': item['openSale'] ?? '',
-                                    'courtId': item['venue'] ?? '',
-                                    'startTime': item['duration'] ?? '',
-                                  }
-                                ],
                               ),
                             ),
                           );
                         }
+
+                        } catch (e) {
+                          if (parentContext.mounted) {
+                            ScaffoldMessenger.of(parentContext).showSnackBar(
+                              SnackBar(content: Text('Không thể tạo đơn: $e')),
+                            );
+                          }
+                        }
                       },
                       child: const Text(
                         'Thanh toán ngay',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],
@@ -936,12 +1099,20 @@ class ExploreScreenState extends State<ExploreScreen> {
         children: [
           Text(
             title,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: primary),
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              color: primary,
+            ),
           ),
           const SizedBox(height: 6),
           Text(
             content,
-            style: const TextStyle(fontSize: 12, color: textSecondary, height: 1.4),
+            style: const TextStyle(
+              fontSize: 12,
+              color: textSecondary,
+              height: 1.4,
+            ),
           ),
         ],
       ),
@@ -953,11 +1124,7 @@ class GestureDetect extends StatelessWidget {
   final Widget child;
   final VoidCallback onTap;
 
-  const GestureDetect({
-    super.key,
-    required this.child,
-    required this.onTap,
-  });
+  const GestureDetect({super.key, required this.child, required this.onTap});
 
   @override
   Widget build(BuildContext context) {

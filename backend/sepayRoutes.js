@@ -3,6 +3,9 @@ const crypto = require('crypto');
 const { db } = require('./firebase');
 
 const router = express.Router();
+const {
+  createMembershipCard
+} = require('./membershipActivation');
 
 function slotId(fieldId, s) {
   return `${fieldId}_${s.courtId}_${s.date}_${s.startTime.replace(':', '-')}`;
@@ -68,6 +71,121 @@ router.post('/payments/sepay/ipn', async (req, res) => {
       return res.status(400).json({ success: false });
     }
 
+    // Xử lý hóa đơn hội viên trước khi xử lý booking.
+if (bookingId.startsWith('MEM_')) {
+  const orderId = bookingId.substring(4);
+
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(orderId)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Mã đơn hội viên không hợp lệ.'
+    });
+  }
+
+  const transactionId = data.transaction?.id;
+
+  if (
+    transactionId === undefined ||
+    transactionId === null ||
+    String(transactionId).trim() === ''
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: 'Thiếu mã giao dịch.'
+    });
+  }
+
+  const orderRef = db.collection('membership_orders').doc(orderId);
+  const cardRef = db.collection('user_memberships').doc(orderId);
+
+  const result = await db.runTransaction(async tx => {
+    // Đọc tất cả tài liệu trước khi ghi.
+    const orderDoc = await tx.get(orderRef);
+    const cardDoc = await tx.get(cardRef);
+
+    if (!orderDoc.exists) return 'not_found';
+
+    const order = orderDoc.data();
+
+    if (
+      order.paymentMethod !== 'sepay' ||
+      order.sepayInvoiceNumber !== bookingId
+    ) {
+      return 'invalid_payment_method';
+    }
+
+    if (Number(order.totalPrice) !== amount) {
+      return 'invalid_amount';
+    }
+
+    if (
+      order.paymentStatus === 'paid' ||
+      order.paymentStatus === 'refund_required'
+    ) {
+      return order.sepayTransactionId === String(transactionId)
+        ? 'already_processed'
+        : 'different_transaction';
+    }
+
+    const now = new Date();
+    const paidAt = now.toISOString();
+
+    const expiryMs = order.expiresAt?.toMillis
+      ? order.expiresAt.toMillis()
+      : new Date(order.expiresAt).getTime();
+
+    const valid =
+      order.status === 'pending_payment' &&
+      order.paymentStatus === 'pending' &&
+      Number.isFinite(expiryMs) &&
+      expiryMs > now.getTime() &&
+      !cardDoc.exists;
+
+    if (!valid) {
+      tx.update(orderRef, {
+        paymentStatus: 'refund_required',
+        latePaymentAt: paidAt,
+        sepayTransactionId: String(transactionId)
+      });
+
+      return 'late_payment';
+    }
+
+    // Xác nhận đơn hội viên đã thanh toán.
+    tx.update(orderRef, {
+      status: 'confirmed',
+      paymentStatus: 'paid',
+      paymentMethod: 'sepay',
+      paidAt,
+      sepayTransactionId: String(transactionId)
+    });
+
+    // Mỗi đơn chỉ kích hoạt được một thẻ.
+    tx.create(
+      cardRef,
+      createMembershipCard(order, orderId, paidAt)
+    );
+
+    return 'confirmed';
+  });
+
+  if ([
+    'not_found',
+    'invalid_payment_method',
+    'invalid_amount',
+    'different_transaction'
+  ].includes(result)) {
+    return res.status(400).json({
+      success: false,
+      result
+    });
+  }
+
+  return res.json({
+    success: true,
+    result
+  });
+}
     const bookingRef = db.collection('bookings').doc(bookingId);
 
     const result = await db.runTransaction(async tx => {
@@ -322,5 +440,154 @@ router.get('/payments/sepay/return', (req, res) => {
   `);
 });
 
+// POST /api/payments/sepay/membership/create
+router.post(
+  '/payments/sepay/membership/create',
+  requireAuth,
+  async (req, res) => {
+    try {
+      const {
+        SEPAY_MERCHANT_ID,
+        SEPAY_SECRET_KEY,
+        PUBLIC_BASE_URL
+      } = process.env;
+
+      if (!SEPAY_MERCHANT_ID || !SEPAY_SECRET_KEY || !PUBLIC_BASE_URL) {
+        return res.status(503).json({
+          success: false,
+          message: 'SePay chưa được cấu hình.'
+        });
+      }
+
+      const orderId = req.body?.orderId;
+
+      if (
+        typeof orderId !== 'string' ||
+        !/^[A-Za-z0-9_-]{1,128}$/.test(orderId)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'Mã đơn hội viên không hợp lệ.'
+        });
+      }
+
+      const orderRef = db.collection('membership_orders').doc(orderId);
+      const snapshot = await orderRef.get();
+
+      if (
+        !snapshot.exists ||
+        snapshot.data().userId !== req.user.id
+      ) {
+        return res.status(404).json({
+          success: false,
+          message: 'Không tìm thấy đơn hội viên.'
+        });
+      }
+
+      const order = snapshot.data();
+
+      if (
+        order.status !== 'pending_payment' ||
+        order.paymentStatus !== 'pending'
+      ) {
+        return res.status(409).json({
+          success: false,
+          message: 'Đơn hội viên không thể thanh toán.'
+        });
+      }
+
+      const expiryMs = order.expiresAt?.toMillis
+        ? order.expiresAt.toMillis()
+        : new Date(order.expiresAt).getTime();
+
+      if (!Number.isFinite(expiryMs) || expiryMs <= Date.now()) {
+        return res.status(409).json({
+          success: false,
+          message: 'Đơn hội viên đã hết hạn.'
+        });
+      }
+
+      if (
+        !Number.isSafeInteger(order.totalPrice) ||
+        order.totalPrice <= 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'Số tiền thanh toán không hợp lệ.'
+        });
+      }
+
+      const client = new SePayPgClient({
+        merchant_id: SEPAY_MERCHANT_ID,
+        secret_key: SEPAY_SECRET_KEY,
+        env: 'sandbox'
+      });
+
+      const baseUrl = PUBLIC_BASE_URL.replace(/\/$/, '');
+
+      // Tiền tố MEM_ để phân biệt hóa đơn hội viên.
+      const invoiceNumber = `MEM_${orderId}`;
+
+      const fields = client.checkout.initOneTimePaymentFields({
+        operation: 'PURCHASE',
+        payment_method: 'BANK_TRANSFER',
+        order_invoice_number: invoiceNumber,
+        order_amount: order.totalPrice,
+        currency: 'VND',
+        order_description: `Thanh toan hoi vien SPORTY ${orderId}`,
+        success_url: `${baseUrl}/api/payments/sepay/return`,
+        error_url: `${baseUrl}/api/payments/sepay/return`,
+        cancel_url: `${baseUrl}/api/payments/sepay/return`
+      });
+
+      await db.runTransaction(async tx => {
+        const fresh = await tx.get(orderRef);
+
+        if (!fresh.exists) {
+          throw new Error('Đơn hội viên không tồn tại.');
+        }
+
+        const current = fresh.data();
+
+        const currentExpiryMs = current.expiresAt?.toMillis
+          ? current.expiresAt.toMillis()
+          : new Date(current.expiresAt).getTime();
+
+        if (
+          current.userId !== req.user.id ||
+          current.status !== 'pending_payment' ||
+          current.paymentStatus !== 'pending' ||
+          current.totalPrice !== order.totalPrice ||
+          !Number.isFinite(currentExpiryMs) ||
+          currentExpiryMs <= Date.now() ||
+          (current.paymentMethod &&
+            current.paymentMethod !== 'sepay')
+        ) {
+          throw new Error('Đơn không còn hợp lệ cho SePay.');
+        }
+
+        tx.update(orderRef, {
+          paymentMethod: 'sepay',
+          sepayInvoiceNumber: invoiceNumber
+        });
+      });
+
+      return res.json({
+        success: true,
+        checkoutUrl: client.checkout.initCheckoutUrl(),
+        fields,
+        orderId,
+        expiresAt: order.expiresAt
+      });
+    } catch (error) {
+      console.error('SePay membership create error:', error);
+
+      return res.status(409).json({
+        success: false,
+        message: 'Không thể tạo thanh toán hội viên.'
+      });
+    }
+  }
+);
 
 module.exports = router;
