@@ -22,9 +22,11 @@ function allowedByPackage(packageData, date, times, field) {
   const lower = rule.toLowerCase();
   if (!rule) return false;
   const day = new Date(date + 'T00:00:00Z').getUTCDay();
-  if (/thứ\s*2\s*[-–]\s*thứ\s*6/.test(lower) && (day === 0 || day === 6)) return false;
-  if (/thứ\s*2\s*[-–]\s*thứ\s*7/.test(lower) && day === 0) return false;
-  if (/thứ|chủ nhật/.test(lower) && !/thứ\s*2\s*[-–]\s*thứ\s*[67]/.test(lower)) return false;
+  if (Array.isArray(packageData.allowedWeekdays) && packageData.allowedWeekdays.length > 0) {
+    if (!packageData.allowedWeekdays.includes(day === 0 ? 7 : day)) return false;
+  } else if (/thứ\\s*2\\s*[-–]\\s*thứ\\s*6/.test(lower) && (day === 0 || day === 6)) return false;
+  else if (/thứ\\s*2\\s*[-–]\\s*thứ\\s*7/.test(lower) && day === 0) return false;
+  else if (/thứ\\s*2\\s*,\\s*thứ\\s*4\\s*,\\s*thứ\\s*6/.test(lower) && ![1,3,5].includes(day)) return false;
   if (lower === 'không giới hạn') return true; // Still subject to venue hours and remaining uses.
   // A fixed schedule requires explicit structured hours; never guess from the label.
   if (lower === 'khung giờ cố định') {
@@ -36,6 +38,7 @@ function allowedByPackage(packageData, date, times, field) {
   const start = parseClock(window[1], window[2], window[3]);
   const end = parseClock(window[4], window[5], window[6]);
   if (start === null || end === null || end <= start) return false;
+  if (Array.isArray(packageData.fixedTimeSlots) && packageData.fixedTimeSlots.length && !times.every(t=>packageData.fixedTimeSlots.includes(t))) return false;
   return times.every(t => {
     const m = Number(t.slice(0,2)) * 60;
     return m >= start && m + 60 <= end;
@@ -92,6 +95,15 @@ router.post('/membership-bookings', requireAuth, async (req,res) => {
       if (!card.fieldId || card.fieldId !== fieldId) return {code:403,message:'Thẻ không áp dụng cho sân này.'};
       const packageDoc=await tx.get(db.collection('memberships').doc(card.membershipId));
       if (!packageDoc.exists || !allowedByPackage(packageDoc.data(),first.date,times,field)) return {code:403,message:'Khung giờ không thuộc quyền lợi gói hội viên.'};
+      const rules=packageDoc.data();
+      const maxHours=Number(rules.maxHoursPerBooking || (card.membershipId==='mem_06'?2:3));
+      if (!Number.isInteger(maxHours) || maxHours<1 || times.length>maxHours) return {code:403,message:'Vượt số giờ tối đa của gói.'};
+      const maxDaily=Number(rules.maxBookingsPerDay || 0);
+      if (maxDaily>0) {
+        const existing=await tx.get(db.collection('bookings').where('userId','==',req.user.id));
+        const daily=existing.docs.filter(d=>{const b=d.data();return b.bookingType==='membership' && b.membershipCardId===membershipCardId && b.status==='confirmed' && Array.isArray(b.selections) && b.selections.some(s=>s.date===first.date);}).length;
+        if(daily>=maxDaily) return {code:409,message:'Đã đạt số lượt đặt tối đa trong ngày.'};
+      }
       const courtCount=Number(field.courtCount)||1;
       if (Number(first.courtId.slice(6))>courtCount) return {code:400,message:'Sân con không hợp lệ.'};
       const open=String(field.openingTime||'06:00'), close=String(field.closingTime||'22:00');
