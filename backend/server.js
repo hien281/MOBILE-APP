@@ -19,6 +19,8 @@ const locationRoutes = require('./locationRoutes');
 app.use('/api', locationRoutes);
 const membershipRoutes = require('./membershipRoutes');
 app.use('/api', membershipRoutes);
+const membershipBookingRoutes = require('./membershipBookingRoutes');
+app.use('/api', membershipBookingRoutes);
 
 app.get('/api/firebase-health', async (req, res) => {
   try {

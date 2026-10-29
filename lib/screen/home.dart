@@ -13,6 +13,7 @@ import 'field_detail.dart';
 import 'search.dart';
 import 'map_screen.dart';
 import 'explore.dart';
+import 'my_schedule.dart';
 import '../widgets/bottom_nav.dart';
 
 const Color oliveGreen = Color(0xFF35167F);
@@ -326,7 +327,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _selectedNavIndex = 2);
     return;
     }
-    if (index == 3) _showComingSoon('Lịch của tôi');
+    if (index == 3) setState(() => _selectedNavIndex = 3);
     if (index == 0) setState(() => _selectedNavIndex = 0);
   }
 
@@ -435,7 +436,8 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox.shrink(),
             ExploreScreen(
             accessToken: widget.accessToken,
-          ),  
+          ),
+          const MyScheduleScreen(),  
           ],
         ),
       bottomNavigationBar: SportyBottomNav(
