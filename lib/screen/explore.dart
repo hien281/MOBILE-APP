@@ -51,18 +51,22 @@ class ExploreScreenState extends State<ExploreScreen> {
           .collection('memberships')
           .get();
       final memberships = membershipSnapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return data;
+        return <String, dynamic>{
+          ...doc.data(),
+          'id': doc.id,
+          'category': 'Gói hội viên',
+        };
       }).toList();
 
       final eventSnapshot = await FirebaseFirestore.instance
           .collection('event')
           .get();
       final events = eventSnapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return data;
+        return <String, dynamic>{
+          ...doc.data(),
+          'id': doc.id,
+          'category': 'Sự kiện',
+        };
       }).toList();
 
       if (mounted && (memberships.isNotEmpty || events.isNotEmpty)) {
@@ -197,8 +201,24 @@ class ExploreScreenState extends State<ExploreScreen> {
     final List<String> sportsOrder = ['Pickleball', 'Cầu lông', 'Bóng đá'];
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: sportsOrder.length,
+      itemCount: sportsOrder.length + 1,
       itemBuilder: (context, sportIndex) {
+        // Hiển thị cả những bài viết có môn thể thao chưa được phân nhóm.
+        if (sportIndex == sportsOrder.length) {
+          final ungrouped = _items.where((item) {
+            final sport = (item['sport'] ?? '').toString().trim().toLowerCase();
+            return !sportsOrder.any((name) => name.toLowerCase() == sport);
+          }).toList();
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: ungrouped.map((item) {
+              final category = (item['category'] ?? '').toString().trim().toLowerCase();
+              return category == 'sự kiện' || category == 'event'
+                  ? _buildEventNewsCard(item)
+                  : _buildMembershipCard(item);
+            }).toList(),
+          );
+        }
         final sportName = sportsOrder[sportIndex];
         final bannerUrl = _sportBanners[sportName];
 
