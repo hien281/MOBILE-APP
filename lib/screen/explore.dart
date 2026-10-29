@@ -27,7 +27,7 @@ class ExploreScreenState extends State<ExploreScreen> {
   // 3 Banner phân khu cố định theo môn thể thao
   final Map<String, String> _sportBanners = {
     'Pickleball':
-        'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQWd7oc0fmSK95FkZUyNUSRhQQDc814OiIxUD7e77tfSTISidQd0UWkxYR&s=10',
+        'https://static.foxnews.com/foxnews.com/content/uploads/2024/07/pickleball-paddle-court.jpg',
     'Cầu lông':
         'https://cdn2.fptshop.com.vn/unsafe/1920x0/filters:format(webp):quality(75)/Cau_long_tieng_Anh_la_gi_cover_ce00312387.png',
     'Bóng đá':
