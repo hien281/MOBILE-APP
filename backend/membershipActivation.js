@@ -1,3 +1,30 @@
+const crypto = require('crypto');
+
+function membershipLockRef(db, userId, membershipId) {
+  const key = crypto.createHash('sha256').update(JSON.stringify([userId, membershipId])).digest('hex');
+  return db.collection('membership_purchase_locks').doc(key);
+}
+
+function millis(value) {
+  if (value?.toMillis) return value.toMillis();
+  return new Date(value).getTime();
+}
+
+function lockIsCurrent(lock, nowMs) {
+  return lock && Number.isFinite(millis(lock.expiresAt)) && millis(lock.expiresAt) > nowMs;
+}
+
+async function hasActiveMembership(db, userId, membershipId, nowMs) {
+  const snapshot = await db.collection('user_memberships').where('userId', '==', userId).get();
+  return snapshot.docs.some(doc => {
+    const card = doc.data();
+    return card.membershipId === membershipId &&
+      card.status === 'active' &&
+      Number.isFinite(millis(card.expiresAt)) &&
+      millis(card.expiresAt) > nowMs;
+  });
+}
+
 function createMembershipCard(order, orderId, paidAt) {
   const freeSlots = order.freeSlots;
   const durationMonths = order.durationMonths;
@@ -52,4 +79,4 @@ function createMembershipCard(order, orderId, paidAt) {
   };
 }
 
-module.exports = { createMembershipCard };
+module.exports = { createMembershipCard, membershipLockRef, lockIsCurrent, hasActiveMembership };
