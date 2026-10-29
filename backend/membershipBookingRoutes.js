@@ -24,9 +24,9 @@ function allowedByPackage(packageData, date, times, field) {
   const day = new Date(date + 'T00:00:00Z').getUTCDay();
   if (Array.isArray(packageData.allowedWeekdays) && packageData.allowedWeekdays.length > 0) {
     if (!packageData.allowedWeekdays.includes(day === 0 ? 7 : day)) return false;
-  } else if (/thứ\\s*2\\s*[-–]\\s*thứ\\s*6/.test(lower) && (day === 0 || day === 6)) return false;
-  else if (/thứ\\s*2\\s*[-–]\\s*thứ\\s*7/.test(lower) && day === 0) return false;
-  else if (/thứ\\s*2\\s*,\\s*thứ\\s*4\\s*,\\s*thứ\\s*6/.test(lower) && ![1,3,5].includes(day)) return false;
+  } else if (/thứ\s*2\s*[-–]\s*thứ\s*6/.test(lower) && (day === 0 || day === 6)) return false;
+  else if (/thứ\s*2\s*[-–]\s*thứ\s*7/.test(lower) && day === 0) return false;
+  else if (/thứ\s*2\s*,\s*thứ\s*4\s*,\s*thứ\s*6/.test(lower) && ![1,3,5].includes(day)) return false;
   if (lower === 'không giới hạn') return true; // Still subject to venue hours and remaining uses.
   // A fixed schedule requires explicit structured hours; never guess from the label.
   if (lower === 'khung giờ cố định') {
@@ -135,9 +135,9 @@ router.post('/membership-bookings', requireAuth, async (req,res) => {
 router.post('/membership-fixed-bookings', requireAuth, async (req,res) => {
   try {
     const {membershipCardId,fieldId,selections}=req.body||{};
-    if (typeof membershipCardId !== 'string' || !/^[\\w-]{1,128}$/.test(membershipCardId.trim()))
+    if (typeof membershipCardId !== 'string' || !/^[\w-]{1,128}$/.test(membershipCardId.trim()))
       return res.status(400).json({success:false,message:'Mã thẻ hội viên không hợp lệ. Vui lòng tải lại thẻ và thử lại.'});
-    if (typeof fieldId !== 'string' || !/^[\\w-]{1,128}$/.test(fieldId.trim()))
+    if (typeof fieldId !== 'string' || !/^[\w-]{1,128}$/.test(fieldId.trim()))
       return res.status(400).json({success:false,message:'Mã sân không hợp lệ. Vui lòng chọn lại sân.'});
     if (!Array.isArray(selections) || selections.length === 0)
       return res.status(400).json({success:false,message:'Bạn chưa chọn ngày, sân hoặc khung giờ.'});
@@ -145,7 +145,7 @@ router.post('/membership-fixed-bookings', requireAuth, async (req,res) => {
       return res.status(400).json({success:false,message:'Tối đa 100 khung giờ trong một lần đặt.'});
     const groups=new Map(), unique=new Set();
     for(const s of selections){
-      if(!s||!dateOK(s.date)||!/^court_[1-9]\\d*$/.test(s.courtId)||!/^([01]\\d|2[0-3]):00$/.test(s.startTime))
+      if(!s||!dateOK(s.date)||!/^court_[1-9]\d*$/.test(s.courtId)||!/^([01]\d|2[0-3]):00$/.test(s.startTime))
         return res.status(400).json({success:false,message:'Ngày, sân hoặc giờ không hợp lệ.'});
       const key=s.date+'|'+s.courtId,slot=key+'|'+s.startTime;
       if(unique.has(slot)) return res.status(400).json({success:false,message:'Có khung giờ trùng nhau.'});
