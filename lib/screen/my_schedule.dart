@@ -113,7 +113,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
       final key = "${slot['date']}|${slot['courtId']}";
       groups.putIfAbsent(key, () => []).add(slot);
     }
-    if (groups.length == 1) return [booking];
+    // Always expose the session, even when the order contains only one day.
     final cancelled = (booking['cancelledSessions'] as List? ?? []).map((e) => e.toString()).toSet();
     return groups.entries.map((e) {
       final item = Map<String,dynamic>.from(booking);
@@ -307,16 +307,29 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final visible=bookings.expand(_sessions).where((b) {
-      if(tab==3) return _cancelled(b);
-      if(tab==2) return _past(b);
-      if(tab==1) return _upcoming(b);
-      return !_cancelled(b);
-    }).toList()..sort((a,b) {
-      final x=_start(a),y=_start(b);
-      if(x==null) return 1;
-      if(y==null) return -1;
-      return tab==1?x.compareTo(y):y.compareTo(x);
+    // Sort sessions inside each parent order, and keep orders together.
+    final grouped = <String, List<Map<String,dynamic>>>{};
+    for (final order in bookings) {
+      final sessions = _sessions(order).where((b) {
+        if (tab == 3) return _cancelled(b);
+        if (tab == 2) return _past(b);
+        if (tab == 1) return _upcoming(b);
+        return !_cancelled(b);
+      }).toList();
+      sessions.sort((a, b) {
+        final x = _start(a), y = _start(b);
+        if (x == null) return 1;
+        if (y == null) return -1;
+        return x.compareTo(y);
+      });
+      if (sessions.isNotEmpty) grouped[order['id']?.toString() ?? ''] = sessions;
+    }
+    final orderIds = grouped.keys.toList()..sort((a,b) {
+      final left = grouped[a]!, right = grouped[b]!;
+      final x = _start(left.first), y = _start(right.first);
+      if (x == null) return 1;
+      if (y == null) return -1;
+      return tab == 1 ? x.compareTo(y) : y.compareTo(x);
     });
     return Scaffold(backgroundColor:_background,body:SafeArea(child:Column(children:[
       Padding(padding:const EdgeInsets.fromLTRB(20,20,20,12),child:Row(children:[
@@ -330,12 +343,39 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
       if(loading && bookings.isEmpty) const LinearProgressIndicator(),
       if(error!=null) Padding(padding:const EdgeInsets.all(12),child:Text(error!,style:const TextStyle(color:Colors.red))),
       Expanded(child:RefreshIndicator(onRefresh:refresh,child:ListView(padding:const EdgeInsets.all(16),children:[
-        if(visible.isEmpty && !loading) const Padding(padding:EdgeInsets.all(30),child:Center(child:Text('Chưa có lịch đặt trong mục này.'))),
-        for(final b in visible) ...[
-          if (b['sessionKey'] != null && (visible.indexOf(b) == 0 || visible[visible.indexOf(b)-1]['id'] != b['id']))
-            Padding(padding: const EdgeInsets.fromLTRB(5,10,5,10),child:Text('Đơn #${b['id']} · ${b['sessionCount']} buổi',style:const TextStyle(color:_purple,fontWeight:FontWeight.w800))),
-          _bookingCard(b),
-        ],
+        if(orderIds.isEmpty && !loading) const Padding(padding:EdgeInsets.all(30),child:Center(child:Text('Chưa có lịch đặt trong mục này.'))),
+        for (final orderId in orderIds)
+          Container(
+            margin: const EdgeInsets.only(bottom: 18),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5F1FC),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFE6DEF6)),
+            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 3, 4, 12),
+                child: Row(children: [
+                  const Icon(Icons.receipt_long_outlined, size: 19, color: _purple),
+                  const SizedBox(width: 7),
+                  Expanded(child: Text('Đơn #$orderId',
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: _purple, fontWeight: FontWeight.w800))),
+                  Text('${grouped[orderId]!.length} / ${_sessions(bookings.firstWhere((b) => b['id']?.toString() == orderId)).length} buổi',
+                    style: const TextStyle(color: _purple, fontSize: 12, fontWeight: FontWeight.w600)),
+                ]),
+              ),
+              for (var i = 0; i < grouped[orderId]!.length; i++) ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 0, 4, 7),
+                  child: Text('Buổi ${_sessions(bookings.firstWhere((b) => b['id']?.toString() == orderId)).indexWhere((s) => s['sessionKey'] == grouped[orderId]![i]['sessionKey']) + 1}',
+                    style: const TextStyle(color: _purple, fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
+                _bookingCard(grouped[orderId]![i]),
+              ],
+            ]),
+          ),
 
       ]))),
     ])));
