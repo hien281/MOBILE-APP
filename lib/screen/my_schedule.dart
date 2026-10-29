@@ -214,7 +214,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Yêu cầu huỷ và hoàn tiền'),
-        content: const Text('Đơn đã thanh toán. SPORTY sẽ ghi nhận yêu cầu để nhân viên kiểm tra điều kiện huỷ và hoàn tiền. Gửi yêu cầu không đồng nghĩa với việc đã huỷ sân hoặc được hoàn tiền.'),
+        content: const Text('Nếu gửi yêu cầu trước giờ bắt đầu ít nhất 24 tiếng, bạn đủ điều kiện được hoàn 100% số tiền đã thanh toán. Yêu cầu sẽ chờ xử lý; sân chưa bị huỷ và tiền chưa được hoàn ngay.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Để sau')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Gửi yêu cầu')),
@@ -401,7 +401,7 @@ class _BookingDetailPage extends StatelessWidget {
         if (remainingLabel != null) section('Thời gian thanh toán',
           Text(remainingLabel!, style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold))),
         if (requested) section('Yêu cầu đang được xử lý',
-          const Text('Đã tiếp nhận yêu cầu huỷ/hoàn tiền. Sân vẫn được giữ cho đến khi có kết quả xử lý.')),
+          const Text('Đã tiếp nhận yêu cầu hoàn 100% theo chính sách huỷ trước 24 giờ. Sân vẫn được giữ cho đến khi có kết quả xử lý.')),
         section('Thông tin đặt sân', Column(children: [
           info('Mã đặt sân', booking['id']?.toString() ?? '-'),
           info('Ngày đặt', first['date']?.toString() ?? '-'),
@@ -414,7 +414,7 @@ class _BookingDetailPage extends StatelessWidget {
           info('Trạng thái', booking['paymentStatus']?.toString() ?? '-'),
           info('Tổng tiền', member ? '0 đ (1 lượt hội viên)' : price),
         ])),
-        section('Hỗ trợ', const Text('Các đơn đã thanh toán cần được kiểm tra điều kiện huỷ và hoàn tiền trước khi xử lý.')),
+        section('Hỗ trợ', const Text('Đơn đã thanh toán: yêu cầu huỷ trước ít nhất 24 giờ được hoàn 100% sau khi xử lý. Dưới 24 giờ không được hoàn tiền theo chính sách này.')),
         if (canPay) Padding(padding: const EdgeInsets.only(bottom: 12),
           child: FilledButton.icon(onPressed: () async { Navigator.pop(context); await onPay(); },
             icon: const Icon(Icons.payment), label: const Text('Thanh toán ngay'),
