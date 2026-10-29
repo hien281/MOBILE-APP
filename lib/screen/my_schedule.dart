@@ -120,7 +120,13 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
       item['selections'] = e.value;
       item['sessionKey'] = e.key;
       item['sessionCount'] = groups.length;
-      if (cancelled.contains(e.key)) item['status'] = 'cancelled';
+      if (cancelled.contains(e.key)) {
+        item['status'] = 'cancelled';
+        final records = booking['cancelledSessionDetails'];
+        if (records is Map && records[e.key.replaceAll('|', '__')] is Map) {
+          item['cancellationDetail'] = records[e.key.replaceAll('|', '__')];
+        }
+      }
       return item;
     }).toList();
   }
@@ -285,15 +291,15 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
             const SizedBox(height:5),
             Text('Sân ${(first['courtId']??'1').toString().replaceFirst('court_','')}${selections.length>1?' • ${selections.length} khung giờ':''}',style:const TextStyle(fontSize:12,color:Colors.black54)),
             const SizedBox(height:7),
-            Container(padding:const EdgeInsets.symmetric(horizontal:9,vertical:4),decoration:BoxDecoration(color:member?const Color(0xFFEDE8FF):const Color(0xFFF3F4F6),borderRadius:BorderRadius.circular(9)),child:Text(member?'Hội viên':'Đặt thường',style:const TextStyle(fontSize:11,fontWeight:FontWeight.w600,color:_purple))),
+            Container(padding:const EdgeInsets.symmetric(horizontal:9,vertical:4),decoration:BoxDecoration(color:member?const Color(0xFF35167F):const Color(0xFFF3F4F6),borderRadius:BorderRadius.circular(9)),child:Text(member?'Hội viên':'Đặt thường',style:TextStyle(fontSize:11,fontWeight:FontWeight.w700,color:member?Colors.white:_purple))),
           ])),
         ]),
-        const Divider(height:24),
+        const SizedBox(height:12),
         Row(children:[
           Icon(cancelled?Icons.cancel_outlined:Icons.check_circle_outline,color:cancelled?Colors.redAccent:_purple,size:17),
           const SizedBox(width:7),
           Expanded(child:Text(status,style:TextStyle(fontWeight:FontWeight.w600,fontSize:13,color:cancelled?Colors.redAccent:_purple))),
-          TextButton(onPressed:()=>_details(b),child:const Text('Chi tiết ›')),
+          FilledButton.icon(onPressed:()=>_details(b),icon:const Icon(Icons.arrow_forward_ios,size:12),label:const Text('Chi tiết',style:TextStyle(fontWeight:FontWeight.w700,fontSize:12)),style:FilledButton.styleFrom(backgroundColor:_purple,foregroundColor:Colors.white,padding:const EdgeInsets.symmetric(horizontal:13,vertical:9),visualDensity:VisualDensity.compact)),
         ]),
         if(_canPay(b)) ...[
           const SizedBox(height:3),
@@ -403,6 +409,7 @@ class _BookingDetailPage extends StatelessWidget {
   bool get paid => !member && booking['paymentStatus'] == 'paid';
   bool get requested => booking['refundRequestStatus'] == 'pending' || (booking['sessionKey'] != null && (booking['refundSessionRequests'] as Map? ?? {}).containsKey(booking['sessionKey'].toString().replaceAll('|','__')));
   bool get cancelled => ['cancelled', 'expired'].contains(booking['status']);
+  bool get eligibleRefund => paid && !cancelled && !requested && selections.isNotEmpty && DateTime.tryParse("${selections.first['date']}T${selections.first['startTime']}:00+07:00")?.difference(DateTime.now()).compareTo(const Duration(hours:24)) != -1 && (DateTime.tryParse("${selections.first['date']}T${selections.first['startTime']}:00+07:00")?.isAfter(DateTime.now()) ?? false);
   String get price {
     final value = (num.tryParse(booking['totalPrice']?.toString() ?? '') ?? 0).round();
     final digits = value.toString().replaceAllMapped(RegExp(r'\\B(?=(\\d{3})+(?!\\d))'), (_) => '.');
@@ -470,6 +477,14 @@ class _BookingDetailPage extends StatelessWidget {
           Text(remainingLabel!, style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold))),
         if (requested) section('Yêu cầu đang được xử lý',
           const Text('Đã tiếp nhận yêu cầu hoàn 100% theo chính sách huỷ trước 24 giờ. Sân vẫn được giữ cho đến khi có kết quả xử lý.')),
+        if (cancelled) section('Thông tin huỷ', Column(children: [
+          info('Buổi đã huỷ', '${first['date']} • ${first['startTime']}–${first['endTime'] ?? '-'} • Sân ${(first['courtId'] ?? 'court_1').toString().replaceFirst('court_', '')}'),
+          info('Trạng thái', statusLabel),
+          if (booking['cancellationDetail'] is Map) ...[
+            info('Thời điểm huỷ', (booking['cancellationDetail']['cancelledAt'] ?? '-').toString()),
+            info('Hoàn lượt', booking['cancellationDetail']['returnedMembershipSlot'] == true ? 'Đã hoàn 1 lượt hội viên' : 'Không áp dụng'),
+          ],
+        ])),
         section('Thông tin đặt sân', Column(children: [
           info('Mã đặt sân', booking['id']?.toString() ?? '-'),
           info('Ngày đặt', first['date']?.toString() ?? '-'),
@@ -482,7 +497,7 @@ class _BookingDetailPage extends StatelessWidget {
           info('Trạng thái', booking['paymentStatus']?.toString() ?? '-'),
           info('Tổng tiền', member ? '0 đ (${booking['sessionKey'] != null ? 1 : (booking['membershipUses'] ?? 1)} lượt hội viên)' : price),
         ])),
-        section('Hỗ trợ', const Text('Đơn đã thanh toán: yêu cầu huỷ trước ít nhất 24 giờ được hoàn 100% sau khi xử lý. Dưới 24 giờ không được hoàn tiền theo chính sách này.')),
+        section('Hỗ trợ', Text(cancelled ? 'Buổi đã huỷ được lưu trong lịch sử để tra cứu. Nếu có yêu cầu hoàn tiền, trạng thái sẽ được cập nhật sau khi xử lý.' : 'Chỉ buổi chưa diễn ra và còn ít nhất 24 giờ trước giờ bắt đầu mới được yêu cầu hoàn 100%. Yêu cầu phải được xử lý trước khi tiền được hoàn.')),
         if (canPay) Padding(padding: const EdgeInsets.only(bottom: 12),
           child: FilledButton.icon(onPressed: () async { Navigator.pop(context); await onPay(); },
             icon: const Icon(Icons.payment), label: const Text('Thanh toán ngay'),
@@ -491,7 +506,7 @@ class _BookingDetailPage extends StatelessWidget {
           child: OutlinedButton.icon(onPressed: () async { Navigator.pop(context); await onCancel(); },
             icon: const Icon(Icons.cancel_outlined), label: const Text('Huỷ lịch đặt'),
             style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)))),
-        if (paid && !cancelled && !requested) Padding(padding: const EdgeInsets.only(bottom: 12),
+        if (eligibleRefund) Padding(padding: const EdgeInsets.only(bottom: 12),
           child: OutlinedButton.icon(onPressed: () async { Navigator.pop(context); await onRefundRequest(); },
             icon: const Icon(Icons.support_agent), label: const Text('Yêu cầu huỷ / hoàn tiền'),
             style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)))),

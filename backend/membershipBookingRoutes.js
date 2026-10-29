@@ -303,7 +303,10 @@ router.post('/membership-bookings/:id/cancel-session', requireAuth, async (req,r
       const slots=await Promise.all(refs.map(r=>tx.get(r)));
       if(slots.some(d=>!d.exists||d.data().bookingId!==doc.id))return {code:409,message:'Khung giờ đã thay đổi, vui lòng thử lại.'};
       const updated=[...cancelled,key],remainingSessions=[...sessions].filter(k=>!updated.includes(k)).length;
-      tx.update(bookingRef,{cancelledSessions:updated,status:remainingSessions===0?'cancelled':'confirmed',
+      const cancelledAt=new Date().toISOString();
+      tx.update(bookingRef,{cancelledSessions:updated,
+        ['cancelledSessionDetails.'+key.replace('|','__')]:{date,courtId,cancelledAt,returnedMembershipSlot:true,reason:'user_requested',status:'cancelled'},
+        status:remainingSessions===0?'cancelled':'confirmed',
         membershipUses:remainingSessions,updatedAt:new Date().toISOString(),
         ...(remainingSessions===0?{cancelledAt:new Date().toISOString()}: {})});
       slots.forEach(d=>tx.delete(d.ref));
