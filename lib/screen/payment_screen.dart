@@ -382,58 +382,9 @@ Future<void> _paySePay() async {
       _allowPop = true;
       return true;
     }
-    if (_openedVNPay) {
-      final leave = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Giao dịch đang xử lý'),
-          content: const Text(
-            'Nếu bạn đã thanh toán, hãy chờ SPORTY tự cập nhật. '
-            'Đừng thanh toán lần nữa. Bạn có thể rời màn hình mà không hủy giữ sân; '
-            'đơn sẽ tự hết hạn nếu không thanh toán thành công.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Ở lại'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Rời màn hình'),
-            ),
-          ],
-        ),
-      );
-      if (leave == true) {
-        _allowPop = true;
-        return true;
-      }
-      return false;
-    }
-    final cancel = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Hủy giữ sân?'),
-        content: const Text(
-          'Nếu quay lại, SPORTY sẽ hủy đơn chưa thanh toán và giải phóng khung giờ.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Tiếp tục'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Hủy giữ sân'),
-          ),
-        ],
-      ),
-    );
-    if (cancel == true && mounted && await _cancel()) {
-      _allowPop = true;
-      return true;
-    }
-    return false;
+    // Rời màn hình không hủy đơn: giữ sân đến expiresAt để thanh toán lại.
+    _allowPop = true;
+    return true;
   }
 
   Future<void> _back() async {
