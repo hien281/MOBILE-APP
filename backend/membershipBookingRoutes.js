@@ -277,7 +277,7 @@ router.post('/membership-bookings/:id/cancel', requireAuth, async (req,res) => {
 router.post('/membership-bookings/:id/cancel-session', requireAuth, async (req,res) => {
   try {
     const {date,courtId}=req.body||{};
-    if(!dateOK(date)||!/^court_[1-9]\\d*$/.test(courtId||''))
+    if(!dateOK(date)||!/^court_[1-9]\d*$/.test(courtId||''))
       return res.status(400).json({success:false,message:'Ngày hoặc sân không hợp lệ.'});
     const bookingRef=db.collection('bookings').doc(req.params.id);
     const result=await db.runTransaction(async tx=>{
