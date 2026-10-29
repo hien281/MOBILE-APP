@@ -135,10 +135,14 @@ router.post('/membership-bookings', requireAuth, async (req,res) => {
 router.post('/membership-fixed-bookings', requireAuth, async (req,res) => {
   try {
     const {membershipCardId,fieldId,selections}=req.body||{};
-    if(typeof membershipCardId!=='string'|| !/^[\\w-]{1,128}$/.test(membershipCardId) ||
-       typeof fieldId!=='string'|| !/^[\\w-]{1,128}$/.test(fieldId) ||
-       !Array.isArray(selections)||selections.length<1||selections.length>100)
-      return res.status(400).json({success:false,message:'Lịch cố định không hợp lệ (tối đa 100 khung giờ).'});
+    if (typeof membershipCardId !== 'string' || !/^[\\w-]{1,128}$/.test(membershipCardId.trim()))
+      return res.status(400).json({success:false,message:'Mã thẻ hội viên không hợp lệ. Vui lòng tải lại thẻ và thử lại.'});
+    if (typeof fieldId !== 'string' || !/^[\\w-]{1,128}$/.test(fieldId.trim()))
+      return res.status(400).json({success:false,message:'Mã sân không hợp lệ. Vui lòng chọn lại sân.'});
+    if (!Array.isArray(selections) || selections.length === 0)
+      return res.status(400).json({success:false,message:'Bạn chưa chọn ngày, sân hoặc khung giờ.'});
+    if (selections.length > 100)
+      return res.status(400).json({success:false,message:'Tối đa 100 khung giờ trong một lần đặt.'});
     const groups=new Map(), unique=new Set();
     for(const s of selections){
       if(!s||!dateOK(s.date)||!/^court_[1-9]\\d*$/.test(s.courtId)||!/^([01]\\d|2[0-3]):00$/.test(s.startTime))
