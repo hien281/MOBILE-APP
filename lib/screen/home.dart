@@ -438,7 +438,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ExploreScreen(
             accessToken: widget.accessToken,
           ),
-          const MyScheduleScreen(isActive: _selectedNavIndex == 3),
+          MyScheduleScreen(isActive: _selectedNavIndex == 3),
           AccountScreen(isActive: _selectedNavIndex == 4),
           ],
         ),
