@@ -460,8 +460,32 @@ class _BookingDetailPage extends StatelessWidget {
 
   bool get member => booking['bookingType'] == 'membership';
   bool get paid => !member && booking['paymentStatus'] == 'paid';
-  bool get requested => booking['refundRequestStatus'] == 'pending' || (booking['sessionKey'] != null && (booking['refundSessionRequests'] as Map? ?? {}).containsKey(booking['sessionKey'].toString().replaceAll('|','__')));
+  bool get requested => booking['refundSandbox'] != null || booking['refundRequestStatus'] != null || (booking['sessionKey'] != null && (booking['refundSessionRequests'] as Map? ?? {}).containsKey(booking['sessionKey'].toString().replaceAll('|','__')));
   bool get cancelled => ['cancelled', 'expired'].contains(booking['status']);
+  Color get statusColor => switch (statusLabel) {
+    'Đã xác nhận' => _green,
+    'Đã hoàn thành' => _grey,
+    'Đã huỷ' => _red,
+    'Hết hạn thanh toán' || 'Hết thời gian thanh toán' => const Color(0xFFB54708),
+    'Chờ thanh toán' => _purple,
+    _ => _grey,
+  };
+  Color get statusBackground => switch (statusLabel) {
+    'Đã xác nhận' => const Color(0xFFE2F5E9),
+    'Đã hoàn thành' => const Color(0xFFECEEF1),
+    'Đã huỷ' => const Color(0xFFFFE5E8),
+    'Hết hạn thanh toán' || 'Hết thời gian thanh toán' => const Color(0xFFFFF1D7),
+    'Chờ thanh toán' => const Color(0xFFECE4FF),
+    _ => const Color(0xFFECEEF1),
+  };
+  IconData get statusIcon => switch (statusLabel) {
+    'Đã xác nhận' => Icons.event_available,
+    'Đã hoàn thành' => Icons.task_alt,
+    'Đã huỷ' => Icons.event_busy,
+    'Hết hạn thanh toán' || 'Hết thời gian thanh toán' => Icons.timer_off_outlined,
+    'Chờ thanh toán' => Icons.schedule,
+    _ => Icons.info_outline,
+  };
   bool get eligibleRefund => paid && !cancelled && !requested && selections.isNotEmpty && DateTime.tryParse("${selections.first['date']}T${selections.first['startTime']}:00+07:00")?.difference(DateTime.now()).compareTo(const Duration(hours:24)) != -1 && (DateTime.tryParse("${selections.first['date']}T${selections.first['startTime']}:00+07:00")?.isAfter(DateTime.now()) ?? false);
   String get price {
     final value = (num.tryParse(booking['totalPrice']?.toString() ?? '') ?? 0).round();
@@ -470,66 +494,74 @@ class _BookingDetailPage extends StatelessWidget {
   }
 
   Widget section(String heading, Widget content) => Container(
-    margin: const EdgeInsets.only(bottom: 12),
-    padding: const EdgeInsets.all(18),
-    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18),
+    margin: const EdgeInsets.only(bottom: 10),
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16),
       border: Border.all(color: const Color(0xFFEAE6F2))),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(heading, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: _purple)),
-      const SizedBox(height: 14), content,
+      Text(heading, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: _purple)),
+      const SizedBox(height: 10),
+      DefaultTextStyle.merge(style: const TextStyle(fontSize: 13), child: content),
     ]),
   );
 
   Widget info(String label, String value) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
+    padding: const EdgeInsets.only(bottom: 8),
     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      SizedBox(width: 120, child: Text(label, style: const TextStyle(color: Colors.black54))),
-      Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600))),
+      SizedBox(width: 120, child: Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54))),
+      Expanded(child: Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
     ]),
   );
 
   @override
   Widget build(BuildContext context) {
     final first = selections.isNotEmpty ? selections.first : booking;
+    final user = FirebaseAuth.instance.currentUser;
     return Scaffold(
       backgroundColor: _background,
-      appBar: AppBar(title: const Text('Chi tiết đặt sân', style: TextStyle(color: _purple, fontWeight: FontWeight.w800)),
+      appBar: AppBar(
+        leading: IconButton(
+          onPressed: () => Navigator.maybePop(context),
+          icon: const Icon(Icons.chevron_left, size: 22),
+          tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+        ),
+        toolbarHeight: 60,
+        title: const Text('Chi tiết đặt sân', style: TextStyle(fontSize: 16, color: _purple, fontWeight: FontWeight.w800)),
         centerTitle: true, backgroundColor: _background, foregroundColor: _purple),
-      body: ListView(padding: const EdgeInsets.all(16), children: [
+      body: ListView(padding: const EdgeInsets.all(14), children: [
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             gradient: const LinearGradient(colors: [Color(0xFF35167F), Color(0xFF7452C3)]),
-            borderRadius: BorderRadius.circular(20)),
+            borderRadius: BorderRadius.circular(16)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              ClipRRect(borderRadius: BorderRadius.circular(14),
-                child: SizedBox(width: 88, height: 88,
+              ClipRRect(borderRadius: BorderRadius.circular(10),
+                child: SizedBox(width: 76, height: 76,
                   child: imageUrl == null
-                    ? const ColoredBox(color: Color(0xFFEBE5FA), child: Icon(Icons.sports_tennis, size: 38, color: _purple))
+                    ? const ColoredBox(color: Color(0xFFEBE5FA), child: Icon(Icons.sports_tennis, size: 34, color: _purple))
                     : Image.network(imageUrl!, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.sports_tennis, color: Colors.white)))),
-              const SizedBox(width: 14),
+              const SizedBox(width: 10),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(venueName, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                Text(member ? 'Đặt bằng thẻ hội viên' : 'Đặt sân thường', style: const TextStyle(color: Colors.white70)),
+                Text(venueName, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                Text(member ? 'Đặt bằng thẻ hội viên' : 'Đặt sân thường', style: const TextStyle(color: Colors.white70, fontSize: 13)),
               ])),
             ]),
-            const SizedBox(height: 16),
-            Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(color: Colors.white.withValues(alpha: .16), borderRadius: BorderRadius.circular(12)),
+            const SizedBox(height: 12),
+            Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(color: statusBackground, borderRadius: BorderRadius.circular(10)),
               child: Row(children: [
-                Icon(cancelled ? Icons.cancel_outlined : Icons.check_circle_outline, color: Colors.white),
-                const SizedBox(width: 8),
-                Expanded(child: Text(statusLabel, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                Icon(statusIcon, color: statusColor, size: 18),
+                const SizedBox(width: 7),
+                Expanded(child: Text(statusLabel, style: TextStyle(color: statusColor, fontSize: 13, fontWeight: FontWeight.bold))),
               ])),
           ]),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         if (remainingLabel != null) section('Thời gian thanh toán',
           Text(remainingLabel!, style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold))),
-        if (requested) section('Yêu cầu đang được xử lý',
-          const Text('Đã tiếp nhận yêu cầu hoàn 100% theo chính sách huỷ trước 24 giờ. Sân vẫn được giữ cho đến khi có kết quả xử lý.')),
+        if (!member && (requested || paid)) _RefundTrackingCard(bookingId: booking['id']?.toString() ?? '', sessionKey: booking['sessionKey']?.toString()),
         if (cancelled) section('Thông tin huỷ', Column(children: [
           info('Buổi đã huỷ', '${first['date']} • ${first['startTime']}–${first['endTime'] ?? '-'} • Sân ${(first['courtId'] ?? 'court_1').toString().replaceFirst('court_', '')}'),
           info('Trạng thái', statusLabel),
@@ -545,6 +577,10 @@ class _BookingDetailPage extends StatelessWidget {
             '${s['date']}  •  ${s['startTime']}–${s['endTime'] ?? '-'}  •  Sân ${(s['courtId'] ?? 'court_1').toString().replaceFirst('court_', '')}'),
           info('Số khung giờ', '${selections.length}'),
         ])),
+        section('Thông tin khách đặt', Column(children: [
+          info('Họ và tên', user?.displayName?.trim().isNotEmpty == true ? user!.displayName!.trim() : '-'),
+          info('Email', user?.email?.trim().isNotEmpty == true ? user!.email!.trim() : '-'),
+        ])),
         section('Thanh toán', Column(children: [
           info('Hình thức', member ? 'Thẻ hội viên (trừ ${booking['sessionKey'] != null ? 1 : (booking['membershipUses'] ?? 1)} lượt)' : 'Thanh toán trực tuyến'),
           info('Trạng thái', booking['paymentStatus']?.toString() ?? '-'),
@@ -557,12 +593,109 @@ class _BookingDetailPage extends StatelessWidget {
             style: FilledButton.styleFrom(backgroundColor: _purple, minimumSize: const Size.fromHeight(48)))),
         if (canCancel) Padding(padding: const EdgeInsets.only(bottom: 12),
           child: OutlinedButton.icon(onPressed: () async { Navigator.pop(context); await onCancel(); },
-            icon: const Icon(Icons.cancel_outlined), label: const Text('Huỷ lịch đặt'),
-            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)))),
+            icon: const Icon(Icons.cancel_outlined, size: 21),
+            label: const Text('Huỷ lịch đặt', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(58)))),
         if (eligibleRefund) Padding(padding: const EdgeInsets.only(bottom: 12),
           child: OutlinedButton.icon(onPressed: () async { Navigator.pop(context); await onRefundRequest(); },
             icon: const Icon(Icons.support_agent), label: const Text('Yêu cầu huỷ / hoàn tiền'),
             style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)))),
+      ]),
+    );
+  }
+}
+
+
+/// Theo dõi trạng thái hoàn tiền sandbox trực tiếp tại trang chi tiết.
+/// GET định kỳ giúp hoàn tất giao dịch giả lập cả trên Vercel (không dùng timer backend).
+class _RefundTrackingCard extends StatefulWidget {
+  final String bookingId;
+  final String? sessionKey;
+  const _RefundTrackingCard({required this.bookingId, this.sessionKey});
+  @override
+  State<_RefundTrackingCard> createState() => _RefundTrackingCardState();
+}
+
+class _RefundTrackingCardState extends State<_RefundTrackingCard> {
+  Timer? _timer;
+  Map<String,dynamic>? _data;
+  String? _error;
+  bool _fetching = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+    _timer = Timer.periodic(const Duration(seconds: 3), (_) => _fetch());
+  }
+  @override
+  void dispose() { _timer?.cancel(); super.dispose(); }
+
+  Future<void> _fetch() async {
+    if (_fetching || widget.bookingId.isEmpty || !mounted) return;
+    _fetching = true;
+    try {
+      final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+      if (token == null) throw Exception('Vui lòng đăng nhập.');
+      final uri = Uri.parse('${ApiClient.baseUrl}/bookings/${Uri.encodeComponent(widget.bookingId)}/refund-status')
+          .replace(queryParameters: widget.sessionKey == null ? null : {'sessionKey':widget.sessionKey!});
+      final response = await http.get(uri, headers: {'Authorization':'Bearer $token', 'Cache-Control':'no-cache'})
+          .timeout(const Duration(seconds: 15));
+      final json = jsonDecode(utf8.decode(response.bodyBytes));
+      if (response.statusCode != 200 || json is! Map || json['success'] != true) {
+        throw Exception(json is Map ? (json['message']?.toString() ?? 'Không thể kiểm tra hoàn tiền.') : 'Không thể kiểm tra hoàn tiền.');
+      }
+      if (mounted) setState(() { _data = Map<String,dynamic>.from(json); _error = null; });
+      if (['succeeded','failed'].contains(json['status'])) _timer?.cancel();
+    } catch(e) {
+      if (mounted) setState(() => _error = e.toString().replaceFirst('Exception: ',''));
+    } finally { _fetching = false; }
+  }
+
+  String _money(dynamic value) {
+    final n = (num.tryParse(value?.toString() ?? '') ?? 0).round();
+    return '${n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.')} đ';
+  }
+  @override
+  Widget build(BuildContext context) {
+    final d = _data;
+    final status = d?['status']?.toString() ?? 'loading';
+    if (status == 'none' && _error == null) return const SizedBox.shrink();
+    final succeeded = status == 'succeeded';
+    final failed = status == 'failed';
+    final title = succeeded ? 'Hoàn tiền thành công (mô phỏng)' : failed ? 'Hoàn tiền mô phỏng thất bại'
+      : status == 'processing' ? 'Đang hoàn tiền (sandbox)' : 'Đang kiểm tra hoàn tiền';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFEAE6F2))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Tiến trình huỷ & hoàn tiền', style: TextStyle(fontSize:15,fontWeight:FontWeight.w800,color:_purple)),
+        const SizedBox(height: 10),
+        Row(children: [
+          Icon(succeeded ? Icons.check_circle : failed ? Icons.error_outline : Icons.hourglass_top,
+            color: succeeded ? _green : failed ? _red : _purple, size:20),
+          const SizedBox(width: 8),
+          Expanded(child: Text(title, style: TextStyle(fontWeight:FontWeight.w700,fontSize:13,
+            color: succeeded ? _green : failed ? _red : _purple))),
+        ]),
+        if (d != null && status != 'none') ...[
+          const SizedBox(height: 10),
+          Text('Số tiền hoàn: ${_money(d['amount'])}', style: const TextStyle(fontSize:13)),
+          const SizedBox(height: 5),
+          Text('Mã hoàn tiền: ${d['refundId'] ?? '-'}', style: const TextStyle(fontSize:12)),
+          if (d['requestedAt'] != null) Text('Đã yêu cầu: ${d['requestedAt']}',style:const TextStyle(fontSize:12)),
+          if (d['refundedAt'] != null) Text('Hoàn tất: ${d['refundedAt']}',style:const TextStyle(fontSize:12)),
+          if (d['failureReason'] != null) Text('${d['failureReason']}',style:const TextStyle(color:_red,fontSize:12)),
+          const SizedBox(height: 8),
+          const Text('Chỉ là giao dịch sandbox. Không có tiền thật được chuyển.',
+            style: TextStyle(fontSize:11,color:_grey)),
+        ],
+        if (_error != null) Padding(padding:const EdgeInsets.only(top:8),
+          child: Text(_error!,style:const TextStyle(fontSize:12,color:_red))),
+        if (!succeeded && !failed) Align(alignment:Alignment.centerRight,
+          child: TextButton.icon(onPressed:_fetch, icon:const Icon(Icons.refresh,size:16),label:const Text('Cập nhật'))),
       ]),
     );
   }

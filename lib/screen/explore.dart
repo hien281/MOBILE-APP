@@ -135,45 +135,55 @@ class ExploreScreenState extends State<ExploreScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            const SizedBox(height: 12),
-            // Filter Chips (Tất cả, Sự kiện, Gói hội viên)
-            SizedBox(
-              height: 40,
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                scrollDirection: Axis.horizontal,
-                itemCount: _categories.length,
-                separatorBuilder: (context, index) => const SizedBox(width: 8),
-                itemBuilder: (context, index) {
-                  final cat = _categories[index];
-                  final isSelected = cat == _selectedCategory;
-                  return GestureDetect(
-                    onTap: () => setState(() => _selectedCategory = cat),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isSelected ? primary : Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: isSelected ? primary : const Color(0xFFE5E7EB),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(20, 18, 16, 14),
+              color: const Color(0xFFF9F8F2),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Khám phá',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: primary),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      for (final cat in _categories)
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 3),
+                            child: ChoiceChip(
+                              label: Center(
+                                child: Text(
+                                  cat,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: _selectedCategory == cat ? FontWeight.w700 : FontWeight.w500,
+                                    color: _selectedCategory == cat ? Colors.white : primary,
+                                  ),
+                                ),
+                              ),
+                              selected: _selectedCategory == cat,
+                              selectedColor: primary,
+                              backgroundColor: Colors.white.withValues(alpha: 0.76),
+                              shape: const StadiumBorder(),
+                              side: BorderSide(
+                                color: _selectedCategory == cat ? primary : const Color(0xFFBDB7C8),
+                                width: 0.85,
+                              ),
+                              showCheckmark: false,
+                              labelPadding: const EdgeInsets.symmetric(horizontal: 1),
+                              padding: const EdgeInsets.symmetric(vertical: 7),
+                              onSelected: (_) => setState(() => _selectedCategory = cat),
+                            ),
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        cat,
-                        style: TextStyle(
-                          color: isSelected ? Colors.white : Colors.black87,
-                          fontWeight: isSelected
-                              ? FontWeight.bold
-                              : FontWeight.w500,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  );
-                },
+                    ],
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 12),
@@ -406,8 +416,12 @@ class ExploreScreenState extends State<ExploreScreen> {
     showModalBottomSheet(
       context: parentContext,
       isScrollControlled: true,
+      isDismissible: true,
+      enableDrag: true,
+      barrierColor: Colors.black54,
       backgroundColor: Colors.transparent,
       builder: (modalCtx) => DraggableScrollableSheet(
+        expand: false,
         initialChildSize: 0.92,
         maxChildSize: 0.95,
         minChildSize: 0.5,
@@ -427,30 +441,11 @@ class ExploreScreenState extends State<ExploreScreen> {
                   color: primary,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
                 ),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(
-                        Icons.arrow_back_ios,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                      onPressed: () => Navigator.of(modalCtx).pop(),
-                    ),
-                    const Expanded(
-                      child: Center(
-                        child: Text(
-                          'Chi tiết tin tức & sự kiện',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const Icon(Icons.share, color: Colors.white, size: 20),
-                  ],
+                child: const Center(
+                  child: Text(
+                    'Chi tiết tin tức & sự kiện',
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ),
               Expanded(
@@ -753,7 +748,7 @@ class ExploreScreenState extends State<ExploreScreen> {
     IconData icon,
     String label,
     String val,
-    Color color,
+    Color color, {bool whiteLabel = false}
   ) {
     return Expanded(
       child: Column(
@@ -765,7 +760,7 @@ class ExploreScreenState extends State<ExploreScreen> {
               const SizedBox(width: 3),
               Text(
                 label,
-                style: const TextStyle(fontSize: 10, color: textSecondary),
+                style: TextStyle(fontSize: 10, color: whiteLabel ? Colors.white : textSecondary, fontWeight: whiteLabel ? FontWeight.w700 : FontWeight.normal),
               ),
             ],
           ),
@@ -828,12 +823,20 @@ class ExploreScreenState extends State<ExploreScreen> {
     final phoneController = TextEditingController(
       text: currentUser?.phoneNumber ?? '',
     );
+    // Hiển thị lỗi ngay trong popup thay vì SnackBar nằm sau lớp modal.
+    final contactError = ValueNotifier<String?>(null);
+    nameController.addListener(() { if (contactError.value != null) contactError.value = null; });
+    phoneController.addListener(() { if (contactError.value != null) contactError.value = null; });
 
     showModalBottomSheet(
       context: parentContext,
       isScrollControlled: true,
+      isDismissible: true,
+      enableDrag: true,
+      barrierColor: Colors.black54,
       backgroundColor: Colors.transparent,
       builder: (modalCtx) => DraggableScrollableSheet(
+        expand: false,
         initialChildSize: 0.9,
         maxChildSize: 0.95,
         minChildSize: 0.5,
@@ -854,30 +857,11 @@ class ExploreScreenState extends State<ExploreScreen> {
                   color: primary,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
                 ),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(
-                        Icons.arrow_back_ios,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                      onPressed: () => Navigator.of(modalCtx).pop(),
-                    ),
-                    const Expanded(
-                      child: Center(
-                        child: Text(
-                          'Chi tiết Thẻ hội viên',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const Icon(Icons.share, color: Colors.white, size: 20),
-                  ],
+                child: const Center(
+                  child: Text(
+                    'Chi tiết Thẻ hội viên',
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ),
 
@@ -919,19 +903,19 @@ class ExploreScreenState extends State<ExploreScreen> {
                                 Icons.access_time,
                                 'Thời hạn',
                                 (item['duration'] ?? '').toString(),
-                                Colors.amber.shade300,
+                                Colors.white, whiteLabel: true,
                               ),
                               _buildMiniFeature(
                                 Icons.check_circle_outline,
                                 'Lượt miễn phí',
                                 (item['freeSlots'] ?? '').toString(),
-                                Colors.amber.shade300,
+                                Colors.white, whiteLabel: true,
                               ),
                               _buildMiniFeature(
                                 Icons.sports_golf,
                                 'Loại sân',
                                 (item['sport'] ?? '').toString(),
-                                Colors.amber.shade300,
+                                Colors.white, whiteLabel: true,
                               ),
                             ],
                           ),
@@ -973,21 +957,44 @@ class ExploreScreenState extends State<ExploreScreen> {
                           const SizedBox(height: 10),
                           TextField(
                             controller: nameController,
+                            style: const TextStyle(fontSize: 13),
                             decoration: const InputDecoration(
                               labelText: 'Họ và tên *',
+                              labelStyle: TextStyle(fontSize: 13),
                               hintText: 'Nhập họ và tên người đăng ký',
+                              hintStyle: TextStyle(fontSize: 13, color: Color(0xFFAAAAAA)),
                               border: OutlineInputBorder(),
                             ),
                           ),
                           const SizedBox(height: 10),
                           TextField(
                             controller: phoneController,
+                            style: const TextStyle(fontSize: 13),
                             keyboardType: TextInputType.phone,
                             decoration: const InputDecoration(
                               labelText: 'Số điện thoại *',
+                              labelStyle: TextStyle(fontSize: 13),
                               hintText: 'Nhập số điện thoại liên hệ',
+                              hintStyle: TextStyle(fontSize: 13, color: Color(0xFFAAAAAA)),
                               border: OutlineInputBorder(),
                             ),
+                          ),
+                          ValueListenableBuilder<String?>(
+                            valueListenable: contactError,
+                            builder: (context, error, _) => error == null
+                                ? const SizedBox.shrink()
+                                : Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.error_outline, color: Color(0xFFB3261E), size: 16),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(error, style: const TextStyle(color: Color(0xFFB3261E), fontSize: 12)),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                           ),
                         ],
                       ),
@@ -1000,15 +1007,45 @@ class ExploreScreenState extends State<ExploreScreen> {
               Container(
                 padding: const EdgeInsets.all(16),
                 color: Colors.white,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
+                    ValueListenableBuilder<String?>(
+                      valueListenable: contactError,
+                      builder: (context, error, _) {
+                        if (error == null) return const SizedBox.shrink();
+                        return Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF1F0),
+                            border: Border.all(color: const Color(0xFFF3B8B4)),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.error_outline, color: Color(0xFFB3261E), size: 17),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(error, style: const TextStyle(
+                                  color: Color(0xFFB3261E), fontSize: 12,
+                                )),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Tổng tiền',
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'Tổng tiền',
                           style: TextStyle(fontSize: 11, color: textSecondary),
                         ),
                         Text(
@@ -1033,6 +1070,20 @@ class ExploreScreenState extends State<ExploreScreen> {
                         ),
                       ),
                       onPressed: () async {
+                        final name = nameController.text.trim();
+                        final phone = phoneController.text.trim();
+                        if (name.isEmpty) {
+                          contactError.value = 'Vui lòng nhập họ và tên người đăng ký.';
+                          return;
+                        }
+                        if (phone.isEmpty) {
+                          contactError.value = 'Vui lòng nhập số điện thoại liên hệ.';
+                          return;
+                        }
+                        if (!RegExp(r'^(?:\+84|0)[0-9]{9}$').hasMatch(phone.replaceAll(RegExp(r'[\s.-]'), ''))) {
+                          contactError.value = 'Số điện thoại không hợp lệ. Vui lòng kiểm tra lại.';
+                          return;
+                        }
                         try {
                           final membershipId = item['id']?.toString() ?? '';
 
@@ -1081,10 +1132,13 @@ class ExploreScreenState extends State<ExploreScreen> {
                         }
 
                         } catch (e) {
-                          if (parentContext.mounted) {
-                            ScaffoldMessenger.of(parentContext).showSnackBar(
-                              SnackBar(content: Text('Không thể tạo đơn: $e')),
+                          if (modalCtx.mounted) {
+                            final message = e.toString().replaceFirst(
+                              RegExp(r'^Exception:\s*'), '',
                             );
+                            contactError.value = message.startsWith('Không thể tạo đơn')
+                                ? message
+                                : 'Không thể tạo đơn: $message';
                           }
                         }
                       },
@@ -1097,13 +1151,14 @@ class ExploreScreenState extends State<ExploreScreen> {
                       ),
                     ),
                   ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
-    );
+    ));
   }
 
   Widget _buildSectionBox(String title, String content) {

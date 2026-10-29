@@ -8,7 +8,8 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
-
+const refundSandboxRoutes = require('./refundSandboxRoutes');
+app.use('/api', refundSandboxRoutes);
 const bookingRoutes = require('./bookingRoutes');
 app.use('/api', bookingRoutes);
 const vnpayRoutes = require('./vnpayRoutes');
