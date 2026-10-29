@@ -305,7 +305,32 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
             Text(status,style:TextStyle(fontWeight:FontWeight.w700,fontSize:10,color:cancelled?_red:status=='Đã hoàn thành'?_grey:status=='Đã xác nhận'?_green:_purple)),
           ])),
           const Spacer(),
-          FilledButton.icon(onPressed:()=>_details(b),icon:const Icon(Icons.arrow_forward_ios,size:12),label:const Text('Chi tiết',style:TextStyle(fontWeight:FontWeight.w700,fontSize:11)),style:FilledButton.styleFrom(backgroundColor:_purple,foregroundColor:Colors.white,padding:const EdgeInsets.symmetric(horizontal:11,vertical:8),visualDensity:VisualDensity.compact)),
+          FilledButton(
+            onPressed: () => _details(b),
+            style: FilledButton.styleFrom(
+              backgroundColor: _purple,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 8,
+              ),
+              visualDensity: VisualDensity.compact,
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Chi tiết',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                  ),
+                ),
+                SizedBox(width: 5),
+                Icon(Icons.chevron_right, size: 16),
+              ],
+            ),
+          ),
         ]),
         if(_canPay(b)) ...[
           const SizedBox(height:3),
@@ -348,7 +373,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
       child:Column(children:[
       Container(
         padding:const EdgeInsets.fromLTRB(20,22,16,20),
-        decoration:const BoxDecoration(color:Color(0xFFF9F8F2),borderRadius:BorderRadius.only(bottomLeft:Radius.circular(22),bottomRight:Radius.circular(22))),
+        decoration:const BoxDecoration(color:Color(0xFFF9F8F2)),
         child:Column(children:[
           Row(children:[
             const Expanded(child:Text('Lịch của tôi',style:TextStyle(fontSize:16,fontWeight:FontWeight.w700,color:_purple))),
@@ -373,7 +398,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
         if(orderIds.isEmpty && !loading) const Padding(padding:EdgeInsets.all(30),child:Center(child:Text('Chưa có lịch đặt trong mục này.'))),
         for (final orderId in orderIds)
           Container(
-            margin: const EdgeInsets.only(bottom: 5),
+            margin: const EdgeInsets.only(bottom: 13),
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: const Color(0xFFF5F1FC).withValues(alpha:0.66),
@@ -393,6 +418,14 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
                     style: const TextStyle(color: _purple, fontSize: 10, fontWeight: FontWeight.w600)),
                 ]),
               ),
+              if (orderId != orderIds.last)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Divider(
+                  color: Color(0xFFBDB8C5),
+                  thickness: 1,
+                ),
+              ),
               for (var i = 0; i < grouped[orderId]!.length; i++) ...[
                 Padding(
                   padding: const EdgeInsets.fromLTRB(4, 0, 4, 7),
@@ -403,8 +436,14 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
               ],
             ]),
           ),
-          if(orderId != orderIds.last) const Padding(padding:EdgeInsets.fromLTRB(8,5,8,15),child:Divider(height:1,thickness:1,color:Color(0xFFC6C1CB))),
-
+          const Padding(
+          padding: EdgeInsets.fromLTRB(8, 5, 8, 15),
+          child: Divider(
+            height: 1,
+            thickness: 1,
+            color: Color(0xFFD9D6E0),
+          ),
+        ),
       ]))),
     ]))));
   }
