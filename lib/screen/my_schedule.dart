@@ -361,7 +361,7 @@ class _BookingDetailPage extends StatelessWidget {
 
   bool get member => booking['bookingType'] == 'membership';
   bool get paid => !member && booking['paymentStatus'] == 'paid';
-  bool get requested => booking['refundRequestStatus'] == 'pending' || (booking['sessionKey'] != null && (booking['refundSessionRequests'] as Map? ?? {}).containsKey(booking['sessionKey']));
+  bool get requested => booking['refundRequestStatus'] == 'pending' || (booking['sessionKey'] != null && (booking['refundSessionRequests'] as Map? ?? {}).containsKey(booking['sessionKey'].toString().replaceAll('|','__')));
   bool get cancelled => ['cancelled', 'expired'].contains(booking['status']);
   String get price {
     final value = (num.tryParse(booking['totalPrice']?.toString() ?? '') ?? 0).round();
