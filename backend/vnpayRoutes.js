@@ -174,11 +174,22 @@ if (id.startsWith('MEM_')) {
       return '04';
     }
 
+    const transactionNo = req.query.vnp_TransactionNo;
+
+    if (
+      typeof transactionNo !== 'string' ||
+      !transactionNo.trim()
+    ) {
+      return '99';
+    }
+
     if (
       order.paymentStatus === 'paid' ||
       order.paymentStatus === 'refund_required'
     ) {
-      return '02';
+      return order.vnpTransactionNo === transactionNo
+        ? '02'
+        : '01';
     }
 
     const success =
@@ -345,6 +356,18 @@ router.post('/payments/vnpay/membership/create', requireAuth, async (req, res) =
         data.totalPrice * 100 > Number.MAX_SAFE_INTEGER
       ) {
         throw new Error('Số tiền không hợp lệ.');
+      }
+      
+      if (
+        !Number.isSafeInteger(data.freeSlots) ||
+        data.freeSlots < 0 ||
+        !Number.isSafeInteger(data.durationMonths) ||
+        data.durationMonths < 1 ||
+        data.durationMonths > 24
+      ) {
+        throw new Error(
+          'Quyền lợi hoặc thời hạn hội viên không hợp lệ.'
+        );
       }
 
       tx.update(orderRef, {

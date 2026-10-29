@@ -517,6 +517,19 @@ router.post(
         });
       }
 
+      if (
+        !Number.isSafeInteger(order.freeSlots) ||
+        order.freeSlots < 0 ||
+        !Number.isSafeInteger(order.durationMonths) ||
+        order.durationMonths < 1 ||
+        order.durationMonths > 24
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'Quyền lợi hoặc thời hạn hội viên không hợp lệ.'
+        });
+      }
+
       const client = new SePayPgClient({
         merchant_id: SEPAY_MERCHANT_ID,
         secret_key: SEPAY_SECRET_KEY,
@@ -560,8 +573,12 @@ router.post(
           current.totalPrice !== order.totalPrice ||
           !Number.isFinite(currentExpiryMs) ||
           currentExpiryMs <= Date.now() ||
-          (current.paymentMethod &&
-            current.paymentMethod !== 'sepay')
+          (current.paymentMethod && current.paymentMethod !== 'sepay') ||
+          !Number.isSafeInteger(current.freeSlots) ||
+          current.freeSlots < 0 ||
+          !Number.isSafeInteger(current.durationMonths) ||
+          current.durationMonths < 1 ||
+          current.durationMonths > 24
         ) {
           throw new Error('Đơn không còn hợp lệ cho SePay.');
         }

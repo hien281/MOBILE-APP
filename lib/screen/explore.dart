@@ -903,7 +903,7 @@ class ExploreScreenState extends State<ExploreScreen> {
                               ),
                               _buildMiniFeature(
                                 Icons.check_circle_outline,
-                                'Miễn phí',
+                                'Số lượng',
                                 item['freeSlots'] ?? '',
                                 Colors.white,
                               ),
