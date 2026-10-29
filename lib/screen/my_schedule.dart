@@ -23,13 +23,14 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
   String? error;
   List<Map<String,dynamic>> bookings = [];
   Map<String,String> fieldNames = {};
+  Map<String,String> fieldImages = {};
   int tab = 0;
 
   @override
   void initState() {
     super.initState();
     _startTimer();
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) { if (mounted && widget.isActive) setState(() {}); });
+    _countdownTimer = Timer.periodic(const Duration(seconds: 15), (_) { if (mounted && widget.isActive) setState(() {}); });
     refresh();
   }
 
@@ -77,7 +78,12 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
           try {
             final response=await http.get(Uri.parse('${ApiClient.baseUrl}/fields/${Uri.encodeComponent(id)}')).timeout(const Duration(seconds:8));
             final d=jsonDecode(utf8.decode(response.bodyBytes));
-            if(response.statusCode==200 && d is Map && d['field'] is Map) return MapEntry(id,(d['field']['name']??id).toString());
+            if(response.statusCode==200 && d is Map && d['field'] is Map) {
+              final field=d['field'] as Map;
+              final img=(field['imageUrl']??(field['images'] is List && (field['images'] as List).isNotEmpty?(field['images'] as List).first:null))?.toString();
+              if(img!=null && img.startsWith('http')) fieldImages[id]=img;
+              return MapEntry(id,(field['name']??id).toString());
+            }
           } catch (_) {}
           return MapEntry(id,id);
         }));
@@ -112,7 +118,9 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
     return values.last;
   }
 
-  bool _cancelled(Map<String,dynamic> b) => ['cancelled','canceled'].contains(b['status']);
+  bool _expiredPayment(Map<String,dynamic> b) => b['status']=='expired' || (b['status']=='pending_payment' && _remaining(b)==Duration.zero);
+  bool _cancelled(Map<String,dynamic> b) => ['cancelled','canceled'].contains(b['status']) || _expiredPayment(b);
+  bool _past(Map<String,dynamic> b) => !_cancelled(b) && (_end(b)?.isBefore(DateTime.now())??false);
   bool _upcoming(Map<String,dynamic> b) {
     final end=_end(b);
     return !_cancelled(b) && end!=null && end.isAfter(DateTime.now());
@@ -120,8 +128,8 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
 
   String _status(Map<String,dynamic> b) {
     final status=b['status']?.toString()??'';
+    if(_expiredPayment(b)) return 'Hết hạn thanh toán';
     if(_cancelled(b)) return 'Đã huỷ';
-    if(status=='expired') return 'Hết hạn thanh toán';
     if(status=='pending_payment') return _remaining(b)>Duration.zero?'Chờ thanh toán':'Hết thời gian thanh toán';
     if(status=='confirmed' || status=='booked') return _upcoming(b)?'Đã xác nhận':'Đã hoàn thành';
     return status;
@@ -144,10 +152,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
 
   bool _pending(Map<String,dynamic> b) => b['status']=='pending_payment' && b['paymentStatus']=='pending';
   bool _canPay(Map<String,dynamic> b) => _pending(b) && _remaining(b)>Duration.zero;
-  String _countdownLabel(Map<String,dynamic> b) {
-    final seconds=_remaining(b).inSeconds;
-    return '${(seconds~/60).toString().padLeft(2,'0')}:${(seconds%60).toString().padLeft(2,'0')}';
-  }
+  String _minutesLabel(Map<String,dynamic> b) => 'Còn ${(_remaining(b).inSeconds+59)~/60} phút để thanh toán';
   Future<void> _resumePayment(Map<String,dynamic> b) async {
     if(!_canPay(b)) return;
     final selections=_selections(b).map((s)=>s.map((k,v)=>MapEntry(k,v?.toString()??''))).toList();
@@ -200,7 +205,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
         for(final s in _selections(b)) Padding(padding:const EdgeInsets.only(bottom:6),child:Text('${s['date']}  •  ${s['startTime']}–${s['endTime']??'-'}  •  Sân ${(s['courtId']??'1').toString().replaceFirst('court_','')}')),
         const SizedBox(height:10),
         Text('Tổng tiền: ${b['bookingType']=='membership'?'0đ (trừ 1 lượt)':"${b['totalPrice']??0}đ"}'),
-        if(_pending(b)) Padding(padding:const EdgeInsets.only(top:10),child:Text(_canPay(b)?'Còn ${_countdownLabel(b)} để thanh toán':'Đã hết 10 phút giữ chỗ',style:const TextStyle(fontWeight:FontWeight.bold,color:Colors.deepOrange))),
+        if(_pending(b)) Padding(padding:const EdgeInsets.only(top:10),child:Text(_canPay(b)?_minutesLabel(b):'Đã hết 10 phút giữ chỗ',style:const TextStyle(fontWeight:FontWeight.bold,color:Colors.deepOrange))),
         if(_canPay(b)) Padding(padding:const EdgeInsets.only(top:12),child:SizedBox(width:double.infinity,child:FilledButton(onPressed:(){Navigator.pop(ctx);_resumePayment(b);},child:const Text('Thanh toán ngay')))),
         if(_canCancel(b)) ...[
           const SizedBox(height:18),
@@ -212,10 +217,53 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
     ));
   }
 
+  Widget _bookingCard(Map<String,dynamic> b) {
+    final id=b['fieldId']?.toString()??'';
+    final image=fieldImages[id];
+    final member=b['bookingType']=='membership';
+    final selections=_selections(b);
+    final first=selections.isNotEmpty?selections.first:b;
+    final status=_status(b);
+    final cancelled=_cancelled(b);
+    return Container(
+      margin:const EdgeInsets.only(bottom:14),
+      decoration:BoxDecoration(color:Colors.white,borderRadius:BorderRadius.circular(20),border:Border.all(color:const Color(0xFFE8E3F1)),boxShadow:[BoxShadow(color:_purple.withValues(alpha:0.06),blurRadius:16,offset:const Offset(0,5))]),
+      child:InkWell(borderRadius:BorderRadius.circular(20),onTap:()=>_details(b),child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        Row(children:[
+          ClipRRect(borderRadius:BorderRadius.circular(13),child:SizedBox(width:92,height:92,child:image==null?Container(color:const Color(0xFFF1EBFA),child:const Icon(Icons.sports_tennis,color:_purple,size:34)):Image.network(image,fit:BoxFit.cover,errorBuilder:(_,__,___)=>Container(color:const Color(0xFFF1EBFA),child:const Icon(Icons.sports_tennis,color:_purple))))),
+          const SizedBox(width:12),
+          Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Text(fieldNames[id]??id,maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(color:_purple,fontSize:16,fontWeight:FontWeight.w800)),
+            const SizedBox(height:6),
+            Text('${first['date']??'-'} • ${first['startTime']??'-'}–${first['endTime']??'-'}',style:const TextStyle(fontSize:12,color:Colors.black87)),
+            const SizedBox(height:5),
+            Text('Sân ${(first['courtId']??'1').toString().replaceFirst('court_','')}${selections.length>1?' • ${selections.length} khung giờ':''}',style:const TextStyle(fontSize:12,color:Colors.black54)),
+            const SizedBox(height:7),
+            Container(padding:const EdgeInsets.symmetric(horizontal:9,vertical:4),decoration:BoxDecoration(color:member?const Color(0xFFEDE8FF):const Color(0xFFF3F4F6),borderRadius:BorderRadius.circular(9)),child:Text(member?'Hội viên':'Đặt thường',style:const TextStyle(fontSize:11,fontWeight:FontWeight.w600,color:_purple))),
+          ])),
+        ]),
+        const Divider(height:24),
+        Row(children:[
+          Icon(cancelled?Icons.cancel_outlined:Icons.check_circle_outline,color:cancelled?Colors.redAccent:_purple,size:17),
+          const SizedBox(width:7),
+          Expanded(child:Text(status,style:TextStyle(fontWeight:FontWeight.w600,fontSize:13,color:cancelled?Colors.redAccent:_purple))),
+          TextButton(onPressed:()=>_details(b),child:const Text('Chi tiết ›')),
+        ]),
+        if(_canPay(b)) ...[
+          const SizedBox(height:3),
+          Text(_minutesLabel(b),style:const TextStyle(fontWeight:FontWeight.w700,color:Colors.deepOrange,fontSize:13)),
+          const SizedBox(height:8),
+          SizedBox(width:double.infinity,child:FilledButton.icon(onPressed:()=>_resumePayment(b),icon:const Icon(Icons.payment),label:const Text('Thanh toán ngay'),style:FilledButton.styleFrom(backgroundColor:_purple,minimumSize:const Size.fromHeight(44)))),
+        ],
+      ]))),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final visible=bookings.where((b) {
-      if(tab==2) return _cancelled(b);
+      if(tab==3) return _cancelled(b);
+      if(tab==2) return _past(b);
       if(tab==1) return _upcoming(b);
       return !_cancelled(b);
     }).toList()..sort((a,b) {
@@ -230,23 +278,15 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
         IconButton(onPressed:()=>refresh(),tooltip:'Làm mới',icon:const Icon(Icons.refresh,color:_purple)),
       ])),
       Padding(padding:const EdgeInsets.symmetric(horizontal:16),child:Row(children:[
-        for(final item in [(0,'Đã đặt'),(1,'Sắp tới'),(2,'Đã huỷ')])
+        for(final item in [(0,'Đã đặt'),(1,'Sắp tới'),(2,'Đã qua'),(3,'Đã huỷ')])
           Expanded(child:Padding(padding:const EdgeInsets.symmetric(horizontal:3),child:ChoiceChip(label:Text(item.$2,style:TextStyle(fontSize:12,color:tab==item.$1?Colors.white:_purple)),selected:tab==item.$1,selectedColor:_purple,backgroundColor:Colors.white,showCheckmark:false,onSelected:(_)=>setState(()=>tab=item.$1)))),
       ])),
       if(loading && bookings.isEmpty) const LinearProgressIndicator(),
       if(error!=null) Padding(padding:const EdgeInsets.all(12),child:Text(error!,style:const TextStyle(color:Colors.red))),
       Expanded(child:RefreshIndicator(onRefresh:refresh,child:ListView(padding:const EdgeInsets.all(16),children:[
         if(visible.isEmpty && !loading) const Padding(padding:EdgeInsets.all(30),child:Center(child:Text('Chưa có lịch đặt trong mục này.'))),
-        for(final b in visible) Card(color:const Color(0xFFF6F1FC),margin:const EdgeInsets.only(bottom:12),shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(16)),child:InkWell(borderRadius:BorderRadius.circular(16),onTap:()=>_details(b),child:Padding(padding:const EdgeInsets.all(15),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-          Row(children:[Expanded(child:Text(fieldNames[b['fieldId']]??b['fieldId']?.toString()??'Sân',style:const TextStyle(fontWeight:FontWeight.bold,fontSize:16,color:_purple))),Chip(label:Text(b['bookingType']=='membership'?'Hội viên':'Đặt thường',style:const TextStyle(fontSize:10)))]),
-          const SizedBox(height:6),
-          for(final s in _selections(b).take(3)) Text('${s['date']}  •  ${s['startTime']}–${s['endTime']??'-'}  •  Sân ${(s['courtId']??'1').toString().replaceFirst('court_','')}',style:const TextStyle(fontSize:12)),
-          if(_selections(b).length>3) Text('Và ${_selections(b).length-3} khung giờ khác...',style:const TextStyle(fontSize:12)),
-          const SizedBox(height:8),
-          if(_pending(b)) Text(_canPay(b)?'Còn ${_countdownLabel(b)} để thanh toán':'Đã hết 10 phút giữ chỗ',style:const TextStyle(color:Colors.deepOrange,fontWeight:FontWeight.w600,fontSize:12)),
-          if(_canPay(b)) Align(alignment:Alignment.centerRight,child:TextButton.icon(onPressed:()=>_resumePayment(b),icon:const Icon(Icons.payment,size:16),label:const Text('Thanh toán ngay'))),
-          Row(children:[Icon(_cancelled(b)?Icons.cancel_outlined:Icons.check_circle_outline,size:15,color:_purple),const SizedBox(width:5),Expanded(child:Text(_status(b),style:const TextStyle(fontSize:12,color:_purple))),const Text('Xem chi tiết ›',style:TextStyle(fontSize:12,color:_purple))]),
-        ])))),
+        for(final b in visible) _bookingCard(b),
+
       ]))),
     ])));
   }
