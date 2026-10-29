@@ -104,6 +104,8 @@ class _HomeScreenState extends State<HomeScreen> {
   String _selectedSport = 'Tất cả';
   int _selectedNavIndex = 0;
   bool _mapWasOpened = false;
+  int _accountRefreshVersion = 0;
+  int _scheduleRefreshVersion = 0;
   final PageController _bannerController = PageController();
   Timer? _bannerTimer;
   int _bannerIndex = 0;
@@ -317,7 +319,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onNavTap(int index) {
     if (index == 4) {
-      setState(() => _selectedNavIndex = 4);
+      setState(() {
+        _selectedNavIndex = 4;
+        _accountRefreshVersion++;
+      });
       return;
     }
     if (index == 1) {
@@ -328,7 +333,10 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _selectedNavIndex = 2);
     return;
     }
-    if (index == 3) setState(() => _selectedNavIndex = 3);
+    if (index == 3) setState(() {
+      _selectedNavIndex = 3;
+      _scheduleRefreshVersion++;
+    });
     if (index == 0) setState(() => _selectedNavIndex = 0);
   }
 
@@ -438,8 +446,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ExploreScreen(
             accessToken: widget.accessToken,
           ),
-          const MyScheduleScreen(),
-          const AccountScreen(),
+          MyScheduleScreen(key: ValueKey('schedule-$_scheduleRefreshVersion')),
+          AccountScreen(key: ValueKey('account-$_accountRefreshVersion')),
           ],
         ),
       bottomNavigationBar: SportyBottomNav(
