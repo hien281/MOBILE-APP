@@ -131,6 +131,104 @@ router.post('/membership-bookings', requireAuth, async (req,res) => {
   } catch(e) {console.error('Membership booking:',e);return res.status(500).json({success:false,message:'Không thể đặt sân bằng thẻ.'});}
 });
 
+
+router.post('/membership-fixed-bookings', requireAuth, async (req,res) => {
+  try {
+    const {membershipCardId,fieldId,selections}=req.body||{};
+    if(typeof membershipCardId!=='string'|| !/^[\\w-]{1,128}$/.test(membershipCardId) ||
+       typeof fieldId!=='string'|| !/^[\\w-]{1,128}$/.test(fieldId) ||
+       !Array.isArray(selections)||selections.length<1||selections.length>100)
+      return res.status(400).json({success:false,message:'Lịch cố định không hợp lệ (tối đa 100 khung giờ).'});
+    const groups=new Map(), unique=new Set();
+    for(const s of selections){
+      if(!s||!dateOK(s.date)||!/^court_[1-9]\\d*$/.test(s.courtId)||!/^([01]\\d|2[0-3]):00$/.test(s.startTime))
+        return res.status(400).json({success:false,message:'Ngày, sân hoặc giờ không hợp lệ.'});
+      const key=s.date+'|'+s.courtId,slot=key+'|'+s.startTime;
+      if(unique.has(slot)) return res.status(400).json({success:false,message:'Có khung giờ trùng nhau.'});
+      unique.add(slot);
+      if(!groups.has(key))groups.set(key,{date:s.date,courtId:s.courtId,times:[]});
+      groups.get(key).times.push(s.startTime);
+    }
+    if(groups.size>30)return res.status(400).json({success:false,message:'Tối đa 30 buổi mỗi lần đặt.'});
+    const now=Date.now(), nowVN=new Date(now+7*3600000).toISOString().slice(0,16);
+    for(const g of groups.values()){
+      g.times.sort();
+      if(g.date+'T'+g.times[0]<=nowVN || g.times.some((t,i)=>i&&Number(t.slice(0,2))!==Number(g.times[i-1].slice(0,2))+1))
+        return res.status(400).json({success:false,message:'Các giờ trong mỗi buổi phải liên tiếp và ở tương lai.'});
+    }
+    const cardRef=db.collection('user_memberships').doc(membershipCardId);
+    const fieldRef=db.collection('fields').doc(fieldId);
+    const bookingRef=db.collection('bookings').doc();
+    const slotRefs=selections.map(s=>db.collection('booking_slots').doc(slotKey(fieldId,s.courtId,s.date,s.startTime)));
+    const legacyRefs=selections.map(s=>db.collection('booking_slots').doc(fieldId+'_'+s.date+'_'+s.startTime.replace(':','-')));
+    const result=await db.runTransaction(async tx=>{
+      // Firestore requires all reads to finish before the first write.
+      const cardDoc=await tx.get(cardRef),fieldDoc=await tx.get(fieldRef);
+      if(!cardDoc.exists||cardDoc.data().userId!==req.user.id)return {code:404,message:'Không tìm thấy thẻ hội viên.'};
+      if(!fieldDoc.exists)return {code:404,message:'Không tìm thấy sân.'};
+      const card=cardDoc.data(),field=fieldDoc.data();
+      if(card.status!=='active'||!Number.isSafeInteger(card.remainingSlots)||card.remainingSlots<groups.size)
+        return {code:409,message:'Thẻ không hoạt động hoặc không đủ lượt cho toàn bộ lịch.'};
+      if(card.fieldId!==fieldId)return {code:403,message:'Thẻ không áp dụng cho sân này.'};
+      const packageDoc=await tx.get(db.collection('memberships').doc(card.membershipId));
+      if(!packageDoc.exists)return {code:404,message:'Không tìm thấy gói hội viên.'};
+      const rules=packageDoc.data(),maxHours=Number(rules.maxHoursPerBooking||(card.membershipId==='mem_06'?2:3)),maxDaily=Number(rules.maxBookingsPerDay||0);
+      if(!Number.isInteger(maxHours)||maxHours<1)return {code:403,message:'Giới hạn giờ của gói không hợp lệ.'};
+      const startCard=Date.parse(card.activatedAt),endCard=Date.parse(card.expiresAt);
+      if(!Number.isFinite(startCard)||!Number.isFinite(endCard))return {code:409,message:'Thời hạn thẻ không hợp lệ.'};
+      const courtCount=Number(field.courtCount)||1,open=String(field.openingTime||'06:00'),close=String(field.closingTime||'22:00');
+      const openMin=Number(open.slice(0,2))*60+Number(open.slice(3,5)),closeMin=Number(close.slice(0,2))*60+Number(close.slice(3,5));
+      const dailyCounts=new Map();
+      for(const g of groups.values()){
+        const start=Date.parse(g.date+'T'+g.times[0]+':00+07:00'),end=start+g.times.length*3600000;
+        if(start<startCard||end>endCard)return {code:409,message:'Có buổi nằm ngoài thời hạn thẻ.'};
+        if(Number(g.courtId.slice(6))>courtCount)return {code:400,message:'Sân con không hợp lệ.'};
+        if(g.times.length>maxHours||!allowedByPackage(rules,g.date,g.times,field))
+          return {code:403,message:'Có buổi ngoài ngày/giờ hoặc vượt quyền lợi hội viên.'};
+        if(g.times.some(t=>Number(t.slice(0,2))*60<openMin||(Number(t.slice(0,2))+1)*60>closeMin))
+          return {code:403,message:'Có buổi ngoài giờ mở cửa.'};
+        dailyCounts.set(g.date,(dailyCounts.get(g.date)||0)+1);
+      }
+      if(maxDaily>0&&[...dailyCounts.values()].some(n=>n>maxDaily))
+        return {code:409,message:'Vượt số buổi tối đa trong ngày.'};
+      if(maxDaily>0){
+        const existing=await tx.get(db.collection('bookings').where('userId','==',req.user.id));
+        for(const d of existing.docs){
+          const b=d.data();
+          if(b.bookingType!=='membership'||b.membershipCardId!==membershipCardId||b.status!=='confirmed')continue;
+          const dates=new Set((b.selections||[]).map(s=>s.date));
+          for(const date of dates)if(dailyCounts.has(date))dailyCounts.set(date,dailyCounts.get(date)+1);
+        }
+        if([...dailyCounts.values()].some(n=>n>maxDaily))return {code:409,message:'Đã có lịch hội viên trong một ngày được chọn.'};
+      }
+      const slotDocs=await Promise.all(slotRefs.map(r=>tx.get(r)));
+      const legacyDocs=await Promise.all(legacyRefs.map(r=>tx.get(r)));
+      if(legacyDocs.some(d=>d.exists))return {code:409,message:'Có giờ đã được đặt. Toàn bộ lịch chưa được tạo.'};
+      const owners=new Map();
+      for(const d of slotDocs)if(d.exists){
+        const s=d.data();
+        if(!expiredHold(s,now)||!s.bookingId)return {code:409,message:'Có giờ đã được đặt. Toàn bộ lịch chưa được tạo.'};
+        owners.set(s.bookingId,db.collection('bookings').doc(s.bookingId));
+      }
+      const ownerDocs=await Promise.all([...owners.values()].map(r=>tx.get(r)));
+      if(ownerDocs.some(d=>!d.exists||d.data().status!=='pending_payment'||Date.parse(d.data().expiresAt)>now))
+        return {code:409,message:'Có giờ đang được giữ chỗ. Toàn bộ lịch chưa được tạo.'};
+      const createdAt=new Date(now).toISOString();
+      const normalized=selections.map(s=>({...s,endTime:String(Number(s.startTime.slice(0,2))+1).padStart(2,'0')+':00'}))
+        .sort((a,b)=>a.date.localeCompare(b.date)||a.courtId.localeCompare(b.courtId)||a.startTime.localeCompare(b.startTime));
+      ownerDocs.forEach(d=>tx.update(d.ref,{status:'expired',paymentStatus:'expired'}));
+      tx.create(bookingRef,{fieldId,userId:req.user.id,bookingType:'membership',membershipCardId,membershipId:card.membershipId,
+        selections:normalized,totalPrice:0,status:'confirmed',paymentStatus:'paid',createdAt,confirmedAt:createdAt,
+        fixedSchedule:true,membershipUses:groups.size});
+      selections.forEach((s,i)=>tx.set(slotRefs[i],{bookingId:bookingRef.id,fieldId,date:s.date,courtId:s.courtId,startTime:s.startTime,status:'booked'}));
+      tx.update(cardRef,{remainingSlots:card.remainingSlots-groups.size});
+      return {success:true,bookingId:bookingRef.id,remainingSlots:card.remainingSlots-groups.size,usedSlots:groups.size};
+    });
+    if(result.code)return res.status(result.code).json({success:false,message:result.message});
+    return res.status(201).json(result);
+  }catch(e){console.error('Fixed membership booking:',e);return res.status(500).json({success:false,message:'Không thể đặt cố định bằng thẻ.'});}
+});
+
 router.post('/membership-bookings/:id/cancel', requireAuth, async (req,res) => {
   try {
     const bookingRef=db.collection('bookings').doc(req.params.id);
@@ -156,9 +254,10 @@ router.post('/membership-bookings/:id/cancel', requireAuth, async (req,res) => {
       slots.forEach(s=>tx.delete(s.ref));
       const remaining=Number(card.data().remainingSlots)||0;
       const total=Number(card.data().totalSlots)||0;
-      // Restore exactly one use for a confirmed membership booking.
-      tx.update(cardRef,{remainingSlots:Math.min(total,remaining+1)});
-      return {success:true,remainingSlots:Math.min(total,remaining+1)};
+      // A fixed booking consumes one use per scheduled session.
+      const restored = Number.isSafeInteger(b.membershipUses) && b.membershipUses > 0 ? b.membershipUses : 1;
+      tx.update(cardRef,{remainingSlots:Math.min(total,remaining+restored)});
+      return {success:true,remainingSlots:Math.min(total,remaining+restored)};
     });
     if(result.code) return res.status(result.code).json({success:false,message:result.message});
     return res.json(result);
