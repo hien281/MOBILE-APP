@@ -23,6 +23,34 @@ function sessions(b) {
 function requestFor(b, sessionKey) {
   return sessionKey ? b.refundSessionRequests?.[keyFor(sessionKey)] : b.refundSandbox;
 }
+function validLegacyTime(value, selected) {
+  const t = Date.parse(value);
+  const starts = selected.map(s => Date.parse(`${s.date}T${s.startTime}:00+07:00`));
+  return Number.isFinite(t) && starts.length > 0 && starts.every(Number.isFinite) &&
+    Math.min(...starts) - t >= 86400000;
+}
+function legacyRequest(b, sessionKey, grouped) {
+  const selected = sessionKey ? grouped.get(sessionKey) : [...grouped.values()].flat();
+  if (!selected?.length) return null;
+  const old = sessionKey ? b.refundSessionRequests?.[keyFor(sessionKey)] : null;
+  if (sessionKey && old?.status !== 'pending') return null;
+  if (!sessionKey && (b.refundRequestStatus !== 'pending' || b.refundSandbox)) return null;
+  const requestedAt = sessionKey ? old.requestedAt : b.refundRequestedAt;
+  if (!validLegacyTime(requestedAt, selected)) return {invalid:true};
+  const amount = Number(sessionKey ? old.amount : b.refundAmount);
+  const expected = Math.round(Number(b.totalPrice) * selected.length / [...grouped.values()].flat().length);
+  if (!Number.isSafeInteger(amount) || amount <= 0 || amount !== expected) return {invalid:true};
+  if (b.bookingType === 'membership' || b.paymentStatus !== 'paid' || !['confirmed','booked'].includes(b.status)) return {invalid:true};
+  if (sessionKey && (b.cancelledSessions || []).includes(sessionKey)) return {invalid:true};
+  if (sessionKey && b.refundSandbox) return {invalid:true};
+  if (!sessionKey && (b.cancelledSessions || []).length) return {invalid:true};
+  if (!sessionKey && Object.keys(b.refundSessionRequests || {}).length) return {invalid:true};
+  return {
+    ...(old || {}), status:'processing', amount, requestedAt,
+    approvedAt:now(), simulation:true, legacyMigrated:true,
+    refundId:`SIM-${crypto.randomUUID()}`, sessionKey
+  };
+}
 router.post('/bookings/:id/refund-request', requireAuth, async (req, res) => {
   if (!validId(req.params.id)) return res.status(400).json({success:false,message:'Mã đơn không hợp lệ.'});
   const sessionKey = req.body?.sessionKey ?? null;
@@ -33,14 +61,17 @@ router.post('/bookings/:id/refund-request', requireAuth, async (req, res) => {
       const doc = await tx.get(ref);
       if (!doc.exists || doc.data().userId !== req.user.id) return err(404,'Không tìm thấy đơn.');
       const b = doc.data();
+      const existing = requestFor(b,sessionKey);
+      if (existing) return {success:true,status:existing.status,amount:existing.amount,simulation:true};
+      // Do not overwrite a request created by the older booking route.
+      if (sessionKey && b.refundSessionRequests?.[keyFor(sessionKey)]) return {success:true,status:b.refundSessionRequests[keyFor(sessionKey)].status,simulation:true};
+      if (!sessionKey && b.refundRequestStatus) return {success:true,status:b.refundRequestStatus,simulation:true};
       if (b.bookingType === 'membership' || b.paymentStatus !== 'paid' || !['confirmed','booked'].includes(b.status)) return err(409,'Đơn không đủ điều kiện hoàn tiền.');
       const grouped = sessions(b);
       if (!grouped.size || (sessionKey && !grouped.has(sessionKey))) return err(404,'Không tìm thấy buổi.');
       const selected = sessionKey ? grouped.get(sessionKey) : [...grouped.values()].flat();
       const starts = selected.map(s => Date.parse(`${s.date}T${s.startTime}:00+07:00`));
       if (starts.some(t => !Number.isFinite(t)) || Math.min(...starts) - Date.now() < 86400000) return err(409,'Chỉ được yêu cầu hoàn trước giờ chơi ít nhất 24 tiếng.');
-      const existing = requestFor(b, sessionKey);
-      if (existing) return {success:true, status:existing.status, amount:existing.amount, simulation:true};
       const all = [...grouped.values()].flat();
       const cancelled = new Set(b.cancelledSessions || []);
       if (sessionKey && cancelled.has(sessionKey)) return err(409,'Buổi đã huỷ.');
@@ -67,11 +98,21 @@ router.get('/bookings/:id/refund-status', requireAuth, async (req,res) => {
       const doc = await tx.get(ref);
       if (!doc.exists || doc.data().userId !== req.user.id) return err(404,'Không tìm thấy đơn.');
       const b = doc.data();
-      const record = requestFor(b,sessionKey);
-      if (!record) return {success:true,status:'none',simulation:true};
-      if (record.status !== 'processing' || Date.now()-Date.parse(record.requestedAt) < SIM_DELAY_MS)
-        return {success:true,...record};
       const grouped = sessions(b);
+      let record = requestFor(b,sessionKey);
+      if (!record || (sessionKey && record.status === 'pending' && !record.refundId)) {
+        const legacy = legacyRequest(b,sessionKey,grouped);
+        if (legacy?.invalid) return err(409,'Yêu cầu cũ không đủ thông tin xác minh; cần kiểm tra thủ công.');
+        if (legacy) {
+          if (sessionKey) tx.update(ref,{[`refundSessionRequests.${keyFor(sessionKey)}`]:legacy});
+          else tx.update(ref,{refundSandbox:legacy,refundRequestStatus:'processing'});
+          return {success:true,...legacy};
+        }
+      }
+      if (!record) return {success:true,status:'none',simulation:true};
+      if (record.status !== 'processing') return {success:true,...record};
+      const elapsed = Date.now()-Date.parse(record.approvedAt || record.requestedAt);
+      if (!Number.isFinite(elapsed) || elapsed < SIM_DELAY_MS) return {success:true,...record};
       const selected = sessionKey ? grouped.get(sessionKey) : [...grouped.values()].flat();
       if (!selected?.length) return err(409,'Không tìm thấy buổi để hoàn.');
       const slotRefs = selected.map(s => db.collection('booking_slots').doc(slotId(b.fieldId,s)));
