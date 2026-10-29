@@ -17,6 +17,8 @@ const sepayRoutes = require('./sepayRoutes');
 app.use('/api', sepayRoutes);
 const locationRoutes = require('./locationRoutes');
 app.use('/api', locationRoutes);
+const membershipRoutes = require('./membershipRoutes');
+app.use('/api', membershipRoutes);
 
 app.get('/api/firebase-health', async (req, res) => {
   try {
