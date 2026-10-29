@@ -7,22 +7,39 @@ const dateOK = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !N
 const slotKey = (f,c,d,t) => `${f}_${c}_${d}_${t.replace(':','-')}`;
 const expiredHold = (s,now) => s.status === 'held' && Number.isFinite(Date.parse(s.expiresAt)) && Date.parse(s.expiresAt) <= now;
 
-function allowedByPackage(packageData, date, times) {
+function parseClock(hour, minute, meridiem) {
+  let h = Number(hour), m = Number(minute);
+  if (!Number.isInteger(h) || !Number.isInteger(m) || m > 59) return null;
+  if (meridiem) {
+    if (h < 1 || h > 12) return null;
+    h = (h % 12) + (meridiem.toUpperCase() === 'PM' ? 12 : 0);
+  } else if (h > 23) return null;
+  return h * 60 + m;
+}
+
+function allowedByPackage(packageData, date, times, field) {
   const rule = String(packageData.applyTime || '').trim();
-  // Fail closed if package has an unfamiliar restriction.
-  if (!rule) return false;
-  const window = rule.match(/(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})/);
-  if (!window) return false;
-  const start = Number(window[1])*60 + Number(window[2]);
-  const end = Number(window[3])*60 + Number(window[4]);
-  if (times.some(t => {const m = Number(t.slice(0,2))*60; return m < start || m+60 > end;})) return false;
-  const day = new Date(date + 'T00:00:00Z').getUTCDay();
   const lower = rule.toLowerCase();
+  if (!rule) return false;
+  const day = new Date(date + 'T00:00:00Z').getUTCDay();
   if (/thứ\s*2\s*[-–]\s*thứ\s*6/.test(lower) && (day === 0 || day === 6)) return false;
   if (/thứ\s*2\s*[-–]\s*thứ\s*7/.test(lower) && day === 0) return false;
-  // Unknown weekday text must not silently grant access.
   if (/thứ|chủ nhật/.test(lower) && !/thứ\s*2\s*[-–]\s*thứ\s*[67]/.test(lower)) return false;
-  return true;
+  if (lower === 'không giới hạn') return true; // Still subject to venue hours and remaining uses.
+  // A fixed schedule requires explicit structured hours; never guess from the label.
+  if (lower === 'khung giờ cố định') {
+    if (!Array.isArray(packageData.fixedTimeSlots) || packageData.fixedTimeSlots.length === 0) return false;
+    return times.every(t => packageData.fixedTimeSlots.includes(t));
+  }
+  const window = rule.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?\s*[-–]\s*(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+  if (!window) return false;
+  const start = parseClock(window[1], window[2], window[3]);
+  const end = parseClock(window[4], window[5], window[6]);
+  if (start === null || end === null || end <= start) return false;
+  return times.every(t => {
+    const m = Number(t.slice(0,2)) * 60;
+    return m >= start && m + 60 <= end;
+  });
 }
 
 router.get('/my-memberships', requireAuth, async (req,res) => {
@@ -74,7 +91,7 @@ router.post('/membership-bookings', requireAuth, async (req,res) => {
       if (!Number.isFinite(Date.parse(card.activatedAt)) || !Number.isFinite(Date.parse(card.expiresAt)) || startMs < Date.parse(card.activatedAt) || endMs > Date.parse(card.expiresAt)) return {code:409,message:'Ngày đặt nằm ngoài thời hạn hội viên.'};
       if (!card.fieldId || card.fieldId !== fieldId) return {code:403,message:'Thẻ không áp dụng cho sân này.'};
       const packageDoc=await tx.get(db.collection('memberships').doc(card.membershipId));
-      if (!packageDoc.exists || !allowedByPackage(packageDoc.data(),first.date,times)) return {code:403,message:'Khung giờ không thuộc quyền lợi gói hội viên.'};
+      if (!packageDoc.exists || !allowedByPackage(packageDoc.data(),first.date,times,field)) return {code:403,message:'Khung giờ không thuộc quyền lợi gói hội viên.'};
       const courtCount=Number(field.courtCount)||1;
       if (Number(first.courtId.slice(6))>courtCount) return {code:400,message:'Sân con không hợp lệ.'};
       const open=String(field.openingTime||'06:00'), close=String(field.closingTime||'22:00');
