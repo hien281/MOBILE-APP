@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../api_client.dart';
+import 'payment_screen.dart';
 
 const _purple = Color(0xFF35167F);
 const _background = Color(0xFFFEFFF7);
@@ -17,6 +18,7 @@ class MyScheduleScreen extends StatefulWidget {
 
 class _MyScheduleScreenState extends State<MyScheduleScreen> {
   Timer? _timer;
+  Timer? _countdownTimer;
   bool loading = true, busy = false;
   String? error;
   List<Map<String,dynamic>> bookings = [];
@@ -27,6 +29,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
   void initState() {
     super.initState();
     _startTimer();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) { if (mounted && widget.isActive) setState(() {}); });
     refresh();
   }
 
@@ -47,7 +50,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
   }
 
   @override
-  void dispose() { _timer?.cancel(); super.dispose(); }
+  void dispose() { _timer?.cancel(); _countdownTimer?.cancel(); super.dispose(); }
 
   Future<String> _token() async {
     final token = await FirebaseAuth.instance.currentUser?.getIdToken();
@@ -119,7 +122,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
     final status=b['status']?.toString()??'';
     if(_cancelled(b)) return 'Đã huỷ';
     if(status=='expired') return 'Hết hạn thanh toán';
-    if(status=='pending_payment') return 'Chờ thanh toán';
+    if(status=='pending_payment') return _remaining(b)>Duration.zero?'Chờ thanh toán':'Hết thời gian thanh toán';
     if(status=='confirmed' || status=='booked') return _upcoming(b)?'Đã xác nhận':'Đã hoàn thành';
     return status;
   }
@@ -128,7 +131,37 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
     final start=_start(b);
     if(start==null || !start.isAfter(DateTime.now())) return false;
     if(b['bookingType']=='membership') return b['status']=='confirmed';
-    return b['status']=='pending_payment' && b['paymentStatus']=='pending';
+    return _canPay(b);
+  }
+
+
+  Duration _remaining(Map<String,dynamic> b) {
+    final expiry=DateTime.tryParse(b['expiresAt']?.toString()??'');
+    if(expiry==null) return Duration.zero;
+    final left=expiry.difference(DateTime.now());
+    return left.isNegative?Duration.zero:left;
+  }
+
+  bool _pending(Map<String,dynamic> b) => b['status']=='pending_payment' && b['paymentStatus']=='pending';
+  bool _canPay(Map<String,dynamic> b) => _pending(b) && _remaining(b)>Duration.zero;
+  String _countdownLabel(Map<String,dynamic> b) {
+    final seconds=_remaining(b).inSeconds;
+    return '${(seconds~/60).toString().padLeft(2,'0')}:${(seconds%60).toString().padLeft(2,'0')}';
+  }
+  Future<void> _resumePayment(Map<String,dynamic> b) async {
+    if(!_canPay(b)) return;
+    final selections=_selections(b).map((s)=>s.map((k,v)=>MapEntry(k,v?.toString()??''))).toList();
+    final expiry=DateTime.tryParse(b['expiresAt']?.toString()??'');
+    if(expiry==null || selections.isEmpty) return;
+    await Navigator.of(context).push(MaterialPageRoute(builder:(_)=>PaymentScreen(
+      bookingId:b['id'].toString(),
+      fieldName:fieldNames[b['fieldId']]??b['fieldId']?.toString()??'Sân',
+      totalPrice:(num.tryParse(b['totalPrice'].toString())??0).round(),
+      expiresAt:expiry,
+      baseUrl:ApiClient.baseUrl,
+      selections:selections,
+    )));
+    if(mounted) refresh(silent:true);
   }
 
   Future<void> _cancel(Map<String,dynamic> b) async {
@@ -167,6 +200,8 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
         for(final s in _selections(b)) Padding(padding:const EdgeInsets.only(bottom:6),child:Text('${s['date']}  •  ${s['startTime']}–${s['endTime']??'-'}  •  Sân ${(s['courtId']??'1').toString().replaceFirst('court_','')}')),
         const SizedBox(height:10),
         Text('Tổng tiền: ${b['bookingType']=='membership'?'0đ (trừ 1 lượt)':"${b['totalPrice']??0}đ"}'),
+        if(_pending(b)) Padding(padding:const EdgeInsets.only(top:10),child:Text(_canPay(b)?'Còn ${_countdownLabel(b)} để thanh toán':'Đã hết 10 phút giữ chỗ',style:const TextStyle(fontWeight:FontWeight.bold,color:Colors.deepOrange))),
+        if(_canPay(b)) Padding(padding:const EdgeInsets.only(top:12),child:SizedBox(width:double.infinity,child:FilledButton(onPressed:(){Navigator.pop(ctx);_resumePayment(b);},child:const Text('Thanh toán ngay')))),
         if(_canCancel(b)) ...[
           const SizedBox(height:18),
           SizedBox(width:double.infinity,child:OutlinedButton.icon(onPressed:() {Navigator.pop(ctx);_cancel(b);},icon:const Icon(Icons.cancel_outlined),label:const Text('Huỷ lịch đặt'))),
@@ -208,6 +243,8 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
           for(final s in _selections(b).take(3)) Text('${s['date']}  •  ${s['startTime']}–${s['endTime']??'-'}  •  Sân ${(s['courtId']??'1').toString().replaceFirst('court_','')}',style:const TextStyle(fontSize:12)),
           if(_selections(b).length>3) Text('Và ${_selections(b).length-3} khung giờ khác...',style:const TextStyle(fontSize:12)),
           const SizedBox(height:8),
+          if(_pending(b)) Text(_canPay(b)?'Còn ${_countdownLabel(b)} để thanh toán':'Đã hết 10 phút giữ chỗ',style:const TextStyle(color:Colors.deepOrange,fontWeight:FontWeight.w600,fontSize:12)),
+          if(_canPay(b)) Align(alignment:Alignment.centerRight,child:TextButton.icon(onPressed:()=>_resumePayment(b),icon:const Icon(Icons.payment,size:16),label:const Text('Thanh toán ngay'))),
           Row(children:[Icon(_cancelled(b)?Icons.cancel_outlined:Icons.check_circle_outline,size:15,color:_purple),const SizedBox(width:5),Expanded(child:Text(_status(b),style:const TextStyle(fontSize:12,color:_purple))),const Text('Xem chi tiết ›',style:TextStyle(fontSize:12,color:_purple))]),
         ])))),
       ]))),
