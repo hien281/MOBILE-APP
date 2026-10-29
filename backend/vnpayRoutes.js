@@ -357,7 +357,6 @@ router.post('/payments/vnpay/membership/create', requireAuth, async (req, res) =
       ) {
         throw new Error('Số tiền không hợp lệ.');
       }
-      
       if (
         !Number.isSafeInteger(data.freeSlots) ||
         data.freeSlots < 0 ||
