@@ -1,6 +1,7 @@
 const express = require('express');
 const { db } = require('./firebase');
 const { requireAuth } = require('./authMiddleware');
+const { membershipLockRef, lockIsCurrent, hasActiveMembership } = require('./membershipActivation');
 
 const router = express.Router();
 
@@ -21,6 +22,14 @@ router.post('/membership-orders', requireAuth, async (req, res) => {
       });
     }
 
+    if (await hasActiveMembership(db, req.user.id, membershipId, Date.now())) {
+      return res.status(409).json({
+        success: false,
+        message: 'Bạn đang sở hữu gói hội viên này. Hãy đợi thẻ hết hạn trước khi mua lại.'
+      });
+    }
+
+    const lockRef = membershipLockRef(db, req.user.id, membershipId);
     const membershipRef = db
       .collection('memberships')
       .doc(membershipId);
@@ -31,6 +40,13 @@ router.post('/membership-orders', requireAuth, async (req, res) => {
 
     const result = await db.runTransaction(async tx => {
       const membershipDoc = await tx.get(membershipRef);
+      const lockDoc = await tx.get(lockRef);
+      if (lockDoc.exists && lockIsCurrent(lockDoc.data(), Date.now())) {
+        return {
+          error: 'Bạn đã có thẻ hoặc đơn mua gói hội viên này còn hiệu lực.',
+          code: 409
+        };
+      }
 
       if (!membershipDoc.exists) {
         return {
@@ -103,6 +119,13 @@ router.post('/membership-orders', requireAuth, async (req, res) => {
         durationMonths,
       };
 
+      tx.set(lockRef, {
+        userId: req.user.id,
+        membershipId,
+        orderId: orderRef.id,
+        status: 'pending_payment',
+        expiresAt: order.expiresAt
+      });
       tx.create(orderRef, order);
 
       return {
