@@ -159,7 +159,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
   bool _canCancel(Map<String,dynamic> b) {
     final start=_start(b);
     if(start==null || !start.isAfter(DateTime.now())) return false;
-    if(b['bookingType']=='membership') return b['status']=='confirmed';
+    if(b['bookingType']=='membership') return b['status']=='confirmed' && start.difference(DateTime.now()) >= const Duration(hours: 24);
     return _canPay(b);
   }
 
