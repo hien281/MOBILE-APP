@@ -6,7 +6,7 @@ const { requireAuth } = require('./authMiddleware');
 const router = express.Router();
 const GATEWAY = process.env.VNPAY_URL || 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html';
 const {
-  createMembershipCard
+  createMembershipCard, membershipLockRef
 } = require('./membershipActivation');
 
 function sign(params, secret) {
@@ -158,6 +158,10 @@ if (id.startsWith('MEM_')) {
   const result = await db.runTransaction(async tx => {
     const orderDoc = await tx.get(orderRef);
     const cardDoc = await tx.get(cardRef);
+    const lockRef = orderDoc.exists
+      ? membershipLockRef(db, orderDoc.data().userId, orderDoc.data().membershipId)
+      : null;
+    const lockDoc = lockRef ? await tx.get(lockRef) : null;
 
     if (!orderDoc.exists) return '01';
 
@@ -208,7 +212,9 @@ if (id.startsWith('MEM_')) {
       order.paymentStatus !== 'pending' ||
       !Number.isFinite(expires) ||
       expires <= now.getTime() ||
-      cardDoc.exists
+      cardDoc.exists ||
+      !lockDoc?.exists ||
+      lockDoc.data().orderId !== orderId
     ) {
       tx.update(orderRef, {
         paymentStatus: 'refund_required',
@@ -229,10 +235,9 @@ if (id.startsWith('MEM_')) {
       vnpTransactionNo: String(req.query.vnp_TransactionNo || '')
     });
 
-    tx.create(
-      cardRef,
-      createMembershipCard(order, orderId, paidAt)
-    );
+    const card = createMembershipCard(order, orderId, paidAt);
+    tx.create(cardRef, card);
+    tx.update(lockRef, { status: 'active', expiresAt: card.expiresAt });
 
     return '00';
   });
