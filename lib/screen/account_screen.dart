@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -5,12 +6,15 @@ import 'package:http/http.dart' as http;
 import '../api_client.dart';
 
 class AccountScreen extends StatefulWidget {
-  const AccountScreen({super.key});
+  const AccountScreen({super.key, this.isActive = true});
+  final bool isActive;
   @override
   State<AccountScreen> createState() => _AccountScreenState();
 }
 
 class _AccountScreenState extends State<AccountScreen> {
+  Timer? _poller;
+  bool _refreshing = false;
   bool loading = true;
   String? error;
   List<dynamic> cards = [];
@@ -19,10 +23,30 @@ class _AccountScreenState extends State<AccountScreen> {
   void initState() {
     super.initState();
     refresh();
+    _startPolling();
   }
 
-  Future<void> refresh() async {
-    setState(() { loading = true; error = null; });
+  void _startPolling() {
+    _poller?.cancel();
+    if (widget.isActive) _poller = Timer.periodic(const Duration(seconds: 5), (_) => refresh(silent: true));
+  }
+
+  @override
+  void didUpdateWidget(covariant AccountScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isActive != widget.isActive) {
+      _startPolling();
+      if (widget.isActive) refresh(silent: true);
+    }
+  }
+
+  @override
+  void dispose() { _poller?.cancel(); super.dispose(); }
+
+  Future<void> refresh({bool silent = false}) async {
+    if (_refreshing || !mounted) return;
+    _refreshing = true;
+    if (!silent) setState(() { loading = true; error = null; });
     try {
       final token = await FirebaseAuth.instance.currentUser?.getIdToken();
       if (token == null) throw Exception('Vui lòng đăng nhập.');
@@ -43,7 +67,8 @@ class _AccountScreenState extends State<AccountScreen> {
     } catch (e) {
       if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
-      if (mounted) setState(() => loading = false);
+      _refreshing = false;
+      if (mounted && !silent) setState(() => loading = false);
     }
   }
 
@@ -62,7 +87,7 @@ class _AccountScreenState extends State<AccountScreen> {
       backgroundColor: const Color(0xFFFEFFF7),
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: refresh,
+          onRefresh: () => refresh(),
           child: ListView(
             padding: const EdgeInsets.all(18),
             children: [

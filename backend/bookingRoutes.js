@@ -581,6 +581,24 @@ router.post('/bookings/:id/refund-request', requireAuth, async (req, res) => {
           !['confirmed','booked'].includes(b.status)) {
         return {code:409, message:'Đơn không đủ điều kiện gửi yêu cầu hoàn tiền.'};
       }
+      const requestedKey = req.body?.sessionKey;
+      if (requestedKey != null) {
+        if (typeof requestedKey !== 'string' || !/^\d{4}-\d{2}-\d{2}\|court_[1-9]\d*$/.test(requestedKey))
+          return {code:400,message:'Buổi cần huỷ không hợp lệ.'};
+        const selected = (Array.isArray(b.selections)?b.selections:[]).filter(s=>s.date+'|'+s.courtId===requestedKey);
+        if (!selected.length) return {code:404,message:'Không tìm thấy buổi trong đơn.'};
+        const starts = selected.map(s=>Date.parse(s.date+'T'+s.startTime+':00+07:00'));
+        if (starts.some(t=>!Number.isFinite(t)) || Math.min(...starts)-Date.now()<24*3600000)
+          return {code:409,message:'Chỉ hoàn tiền khi yêu cầu trước giờ chơi ít nhất 24 tiếng.'};
+        const key=requestedKey.replace('|','__');
+        const existing = b.refundSessionRequests||{};
+        if (existing[key]) return {success:true,status:existing[key].status};
+        const all = Array.isArray(b.selections)?b.selections:[];
+        const amount = Math.round(Number(b.totalPrice)*selected.length/all.length);
+        if (!Number.isFinite(amount)||amount<=0) return {code:409,message:'Không xác định được số tiền hoàn.'};
+        tx.update(ref,{['refundSessionRequests.'+key]:{status:'pending',requestedAt:new Date().toISOString(),amount,policy:'full_before_24h',sessionKey:requestedKey}});
+        return {success:true,status:'pending',refundAmount:amount};
+      }
       if (b.refundRequestStatus === 'pending') return {success:true, status:'pending'};
       if (b.refundRequestStatus) return {code:409, message:'Yêu cầu đã được xử lý trước đó.'};
       const selections = Array.isArray(b.selections) ? b.selections : [];

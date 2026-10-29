@@ -439,7 +439,7 @@ class _HomeScreenState extends State<HomeScreen> {
             accessToken: widget.accessToken,
           ),
           const MyScheduleScreen(isActive: _selectedNavIndex == 3),
-          const AccountScreen(),
+          AccountScreen(isActive: _selectedNavIndex == 4),
           ],
         ),
       bottomNavigationBar: SportyBottomNav(

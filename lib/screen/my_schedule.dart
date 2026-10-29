@@ -104,6 +104,27 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
     return [];
   }
 
+  // Expand one parent order into session cards; keep the original order ID.
+  List<Map<String,dynamic>> _sessions(Map<String,dynamic> booking) {
+    final all = _selections(booking);
+    if (all.isEmpty) return [booking];
+    final groups = <String,List<Map<String,dynamic>>>{};
+    for (final slot in all) {
+      final key = "${slot['date']}|${slot['courtId']}";
+      groups.putIfAbsent(key, () => []).add(slot);
+    }
+    if (groups.length == 1) return [booking];
+    final cancelled = (booking['cancelledSessions'] as List? ?? []).map((e) => e.toString()).toSet();
+    return groups.entries.map((e) {
+      final item = Map<String,dynamic>.from(booking);
+      item['selections'] = e.value;
+      item['sessionKey'] = e.key;
+      item['sessionCount'] = groups.length;
+      if (cancelled.contains(e.key)) item['status'] = 'cancelled';
+      return item;
+    }).toList();
+  }
+
   DateTime? _start(Map<String,dynamic> b) {
     final values=_selections(b).map((s)=>DateTime.tryParse("${s['date']}T${s['startTime']}:00+07:00")).whereType<DateTime>().toList();
     if(values.isEmpty) return null;
@@ -138,7 +159,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
   bool _canCancel(Map<String,dynamic> b) {
     final start=_start(b);
     if(start==null || !start.isAfter(DateTime.now())) return false;
-    if(b['bookingType']=='membership') return b['status']=='confirmed';
+    if(b['bookingType']=='membership') return b['status']=='confirmed' && start.difference(DateTime.now()) >= const Duration(hours: 24);
     return _canPay(b);
   }
 
@@ -171,9 +192,10 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
 
   Future<void> _cancel(Map<String,dynamic> b) async {
     final membership=b['bookingType']=='membership';
+    final sessionKey=b['sessionKey']?.toString();
     final confirmed=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(
       title:const Text('Xác nhận huỷ lịch'),
-      content:Text(membership?'Huỷ lịch này sẽ trả lại 1 lượt hội viên và mở lại khung giờ cho người khác đặt.':'Huỷ đơn đang chờ thanh toán và giải phóng khung giờ?'),
+      content:Text(membership?'Huỷ buổi này sẽ hoàn lại 1 lượt nếu còn ít nhất 24 giờ trước giờ chơi.':'Huỷ đơn đang chờ thanh toán và giải phóng khung giờ?'),
       actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('Giữ lịch')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Huỷ lịch'))],
     ));
     if(confirmed!=true || !mounted) return;
@@ -181,7 +203,8 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
       final token=await _token();
       final id=b['id'].toString();
       final path=membership?'membership-bookings':'bookings';
-      final r=await http.post(Uri.parse('${ApiClient.baseUrl}/$path/${Uri.encodeComponent(id)}/cancel'),headers:{'Authorization':'Bearer $token'}).timeout(const Duration(seconds:20));
+      final endpoint=membership && sessionKey!=null ? '$path/${Uri.encodeComponent(b['id'].toString())}/cancel-session' : '$path/${Uri.encodeComponent(b['id'].toString())}/cancel';
+      final r=await http.post(Uri.parse('${ApiClient.baseUrl}/$endpoint'),headers:{'Authorization':'Bearer $token','Content-Type':'application/json'},body:membership && sessionKey!=null ? jsonEncode({'date':sessionKey.split('|')[0],'courtId':sessionKey.split('|')[1]}) : null).timeout(const Duration(seconds:20));
       final data=jsonDecode(utf8.decode(r.bodyBytes));
       if(r.statusCode!=200 || data is! Map || data['success']!=true) throw Exception(data is Map ? data['message']?.toString()??'Không thể huỷ lịch.' : 'Không thể huỷ lịch.');
       await refresh(silent:true);
@@ -226,7 +249,8 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
       final token = await _token();
       final response = await http.post(
         Uri.parse('${ApiClient.baseUrl}/bookings/${Uri.encodeComponent(b['id'].toString())}/refund-request'),
-        headers: {'Authorization': 'Bearer $token'},
+        headers: {'Authorization': 'Bearer $token', 'Content-Type':'application/json'},
+        body: b['sessionKey'] != null ? jsonEncode({'sessionKey': b['sessionKey']}) : null,
       ).timeout(const Duration(seconds: 15));
       final data = jsonDecode(utf8.decode(response.bodyBytes));
       if (response.statusCode != 200 || data is! Map || data['success'] != true) {
@@ -283,7 +307,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final visible=bookings.where((b) {
+    final visible=bookings.expand(_sessions).where((b) {
       if(tab==3) return _cancelled(b);
       if(tab==2) return _past(b);
       if(tab==1) return _upcoming(b);
@@ -307,7 +331,11 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
       if(error!=null) Padding(padding:const EdgeInsets.all(12),child:Text(error!,style:const TextStyle(color:Colors.red))),
       Expanded(child:RefreshIndicator(onRefresh:refresh,child:ListView(padding:const EdgeInsets.all(16),children:[
         if(visible.isEmpty && !loading) const Padding(padding:EdgeInsets.all(30),child:Center(child:Text('Chưa có lịch đặt trong mục này.'))),
-        for(final b in visible) _bookingCard(b),
+        for(final b in visible) ...[
+          if (b['sessionKey'] != null && (visible.indexOf(b) == 0 || visible[visible.indexOf(b)-1]['id'] != b['id']))
+            Padding(padding: const EdgeInsets.fromLTRB(5,10,5,10),child:Text('Đơn #${b['id']} · ${b['sessionCount']} buổi',style:const TextStyle(color:_purple,fontWeight:FontWeight.w800))),
+          _bookingCard(b),
+        ],
 
       ]))),
     ])));
@@ -333,7 +361,7 @@ class _BookingDetailPage extends StatelessWidget {
 
   bool get member => booking['bookingType'] == 'membership';
   bool get paid => !member && booking['paymentStatus'] == 'paid';
-  bool get requested => booking['refundRequestStatus'] == 'pending';
+  bool get requested => booking['refundRequestStatus'] == 'pending' || (booking['sessionKey'] != null && (booking['refundSessionRequests'] as Map? ?? {}).containsKey(booking['sessionKey'].toString().replaceAll('|','__')));
   bool get cancelled => ['cancelled', 'expired'].contains(booking['status']);
   String get price {
     final value = (num.tryParse(booking['totalPrice']?.toString() ?? '') ?? 0).round();
@@ -410,9 +438,9 @@ class _BookingDetailPage extends StatelessWidget {
           info('Số khung giờ', '${selections.length}'),
         ])),
         section('Thanh toán', Column(children: [
-          info('Hình thức', member ? 'Thẻ hội viên (trừ 1 lượt)' : 'Thanh toán trực tuyến'),
+          info('Hình thức', member ? 'Thẻ hội viên (trừ ${booking['sessionKey'] != null ? 1 : (booking['membershipUses'] ?? 1)} lượt)' : 'Thanh toán trực tuyến'),
           info('Trạng thái', booking['paymentStatus']?.toString() ?? '-'),
-          info('Tổng tiền', member ? '0 đ (1 lượt hội viên)' : price),
+          info('Tổng tiền', member ? '0 đ (${booking['sessionKey'] != null ? 1 : (booking['membershipUses'] ?? 1)} lượt hội viên)' : price),
         ])),
         section('Hỗ trợ', const Text('Đơn đã thanh toán: yêu cầu huỷ trước ít nhất 24 giờ được hoàn 100% sau khi xử lý. Dưới 24 giờ không được hoàn tiền theo chính sách này.')),
         if (canPay) Padding(padding: const EdgeInsets.only(bottom: 12),

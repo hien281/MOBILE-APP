@@ -244,10 +244,11 @@ router.post('/membership-bookings/:id/cancel', requireAuth, async (req,res) => {
       if(b.bookingType!=='membership') return {code:400,message:'Đây không phải lịch hội viên.'};
       if(b.status==='cancelled') return {success:true};
       if(b.status!=='confirmed') return {code:409,message:'Lịch không thể huỷ.'};
-      const selections=Array.isArray(b.selections)?b.selections:[];
+      const cancelled=Array.isArray(b.cancelledSessions)?b.cancelledSessions:[];
+      const selections=(Array.isArray(b.selections)?b.selections:[]).filter(s=>!cancelled.includes(s.date+'|'+s.courtId));
       if(!selections.length || !b.membershipCardId) return {code:409,message:'Thiếu thông tin lịch.'};
       const first=selections.map(s=>Date.parse(s.date+'T'+s.startTime+':00+07:00'));
-      if(first.some(t=>!Number.isFinite(t)) || Math.min(...first)<=Date.now()) return {code:409,message:'Không thể huỷ lịch đã bắt đầu.'};
+      if(first.some(t=>!Number.isFinite(t)) || Math.min(...first)-Date.now()<24*3600000) return {code:409,message:'Không thể huỷ lịch đã bắt đầu.'};
       const cardRef=db.collection('user_memberships').doc(b.membershipCardId);
       const card=await tx.get(cardRef);
       if(!card.exists || card.data().userId!==req.user.id) return {code:409,message:'Không tìm thấy thẻ hội viên.'};
@@ -259,13 +260,61 @@ router.post('/membership-bookings/:id/cancel', requireAuth, async (req,res) => {
       const remaining=Number(card.data().remainingSlots)||0;
       const total=Number(card.data().totalSlots)||0;
       // A fixed booking consumes one use per scheduled session.
-      const restored = Number.isSafeInteger(b.membershipUses) && b.membershipUses > 0 ? b.membershipUses : 1;
+      const restored = new Set(selections.map(s=>s.date+'|'+s.courtId)).size;
       tx.update(cardRef,{remainingSlots:Math.min(total,remaining+restored)});
       return {success:true,remainingSlots:Math.min(total,remaining+restored)};
     });
     if(result.code) return res.status(result.code).json({success:false,message:result.message});
     return res.json(result);
   } catch(e) {console.error('Cancel membership booking:',e);return res.status(500).json({success:false,message:'Không thể huỷ lịch hội viên.'});}
+});
+
+
+/**
+ * Cancel one session (date + court) within a fixed membership booking.
+ * Keep the parent order ID and history intact; restore exactly one use.
+ */
+router.post('/membership-bookings/:id/cancel-session', requireAuth, async (req,res) => {
+  try {
+    const {date,courtId}=req.body||{};
+    if(!dateOK(date)||!/^court_[1-9]\d*$/.test(courtId||''))
+      return res.status(400).json({success:false,message:'Ngày hoặc sân không hợp lệ.'});
+    const bookingRef=db.collection('bookings').doc(req.params.id);
+    const result=await db.runTransaction(async tx=>{
+      const doc=await tx.get(bookingRef);
+      if(!doc.exists)return {code:404,message:'Không tìm thấy đơn.'};
+      const b=doc.data();
+      if(b.userId!==req.user.id)return {code:403,message:'Không có quyền huỷ buổi này.'};
+      if(b.bookingType!=='membership'||b.status!=='confirmed')return {code:409,message:'Đơn không thể huỷ.'};
+      const all=Array.isArray(b.selections)?b.selections:[];
+      const sessions=new Set(all.map(s=>s.date+'|'+s.courtId));
+      const key=date+'|'+courtId;
+      if(!sessions.has(key))return {code:404,message:'Không tìm thấy buổi trong đơn.'};
+      const cancelled=Array.isArray(b.cancelledSessions)?b.cancelledSessions:[];
+      if(cancelled.includes(key))return {success:true,alreadyCancelled:true};
+      const selected=all.filter(s=>s.date===date&&s.courtId===courtId);
+      const start=Math.min(...selected.map(s=>Date.parse(s.date+'T'+s.startTime+':00+07:00')));
+      if(!Number.isFinite(start)||start-Date.now()<24*3600000)
+        return {code:409,message:'Chỉ được huỷ và hoàn lượt trước giờ bắt đầu ít nhất 24 tiếng.'};
+      const cardRef=db.collection('user_memberships').doc(b.membershipCardId);
+      const card=await tx.get(cardRef);
+      if(!card.exists||card.data().userId!==req.user.id)return {code:409,message:'Không tìm thấy thẻ hội viên.'};
+      const refs=selected.map(s=>db.collection('booking_slots').doc(slotKey(b.fieldId,s.courtId,s.date,s.startTime)));
+      const slots=await Promise.all(refs.map(r=>tx.get(r)));
+      if(slots.some(d=>!d.exists||d.data().bookingId!==doc.id))return {code:409,message:'Khung giờ đã thay đổi, vui lòng thử lại.'};
+      const updated=[...cancelled,key],remainingSessions=[...sessions].filter(k=>!updated.includes(k)).length;
+      tx.update(bookingRef,{cancelledSessions:updated,status:remainingSessions===0?'cancelled':'confirmed',
+        membershipUses:remainingSessions,updatedAt:new Date().toISOString(),
+        ...(remainingSessions===0?{cancelledAt:new Date().toISOString()}: {})});
+      slots.forEach(d=>tx.delete(d.ref));
+      const total=Number(card.data().totalSlots)||0;
+      const next=Math.min(total,(Number(card.data().remainingSlots)||0)+1);
+      tx.update(cardRef,{remainingSlots:next});
+      return {success:true,remainingSlots:next,cancelledSession:key};
+    });
+    if(result.code)return res.status(result.code).json({success:false,message:result.message});
+    return res.json(result);
+  }catch(e){console.error('Cancel membership session:',e);return res.status(500).json({success:false,message:'Không thể huỷ buổi này.'});}
 });
 
 module.exports=router;
