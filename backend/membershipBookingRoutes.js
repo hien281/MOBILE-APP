@@ -244,10 +244,11 @@ router.post('/membership-bookings/:id/cancel', requireAuth, async (req,res) => {
       if(b.bookingType!=='membership') return {code:400,message:'Đây không phải lịch hội viên.'};
       if(b.status==='cancelled') return {success:true};
       if(b.status!=='confirmed') return {code:409,message:'Lịch không thể huỷ.'};
-      const selections=Array.isArray(b.selections)?b.selections:[];
+      const cancelled=Array.isArray(b.cancelledSessions)?b.cancelledSessions:[];
+      const selections=(Array.isArray(b.selections)?b.selections:[]).filter(s=>!cancelled.includes(s.date+'|'+s.courtId));
       if(!selections.length || !b.membershipCardId) return {code:409,message:'Thiếu thông tin lịch.'};
       const first=selections.map(s=>Date.parse(s.date+'T'+s.startTime+':00+07:00'));
-      if(first.some(t=>!Number.isFinite(t)) || Math.min(...first)<=Date.now()) return {code:409,message:'Không thể huỷ lịch đã bắt đầu.'};
+      if(first.some(t=>!Number.isFinite(t)) || Math.min(...first)-Date.now()<24*3600000) return {code:409,message:'Không thể huỷ lịch đã bắt đầu.'};
       const cardRef=db.collection('user_memberships').doc(b.membershipCardId);
       const card=await tx.get(cardRef);
       if(!card.exists || card.data().userId!==req.user.id) return {code:409,message:'Không tìm thấy thẻ hội viên.'};
@@ -259,7 +260,7 @@ router.post('/membership-bookings/:id/cancel', requireAuth, async (req,res) => {
       const remaining=Number(card.data().remainingSlots)||0;
       const total=Number(card.data().totalSlots)||0;
       // A fixed booking consumes one use per scheduled session.
-      const restored = Number.isSafeInteger(b.membershipUses) && b.membershipUses > 0 ? b.membershipUses : 1;
+      const restored = new Set(selections.map(s=>s.date+'|'+s.courtId)).size;
       tx.update(cardRef,{remainingSlots:Math.min(total,remaining+restored)});
       return {success:true,remainingSlots:Math.min(total,remaining+restored)};
     });
