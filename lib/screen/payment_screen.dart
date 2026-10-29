@@ -366,23 +366,9 @@ Future<void> _paySePay() async {
   }
 
   Future<bool> _onBack() async {
-    if (_allowPop) return true;
-    if (_checking || _paying || _cancelling) return false;
-    final checked = await _refresh();
-    if (!mounted) return false;
-    if (!checked) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Chưa xác minh được trạng thái đơn. Vui lòng thử lại.'),
-        ),
-      );
-      return false;
-    }
-    if (_success || _closed || _refund || _status != 'pending_payment') {
-      _allowPop = true;
-      return true;
-    }
-    // Rời màn hình không hủy đơn: giữ sân đến expiresAt để thanh toán lại.
+    // Không chặn điều hướng để chờ API xác minh trạng thái.
+    // Đơn pending vẫn được giữ tới expiresAt; quay lại không tự hủy đơn.
+    if (_cancelling) return false;
     _allowPop = true;
     return true;
   }
@@ -495,13 +481,7 @@ Future<void> _paySePay() async {
               size: 20,
               color: primary,
             ),
-            onPressed: () {
-              if (Navigator.of(context, rootNavigator: true).canPop()) {
-                 Navigator.of(context, rootNavigator: true).pop();
-              } else {
-                 Navigator.pop(context);
-              }
-},
+            onPressed: _back,
           ),
         ),
         body: Container(
