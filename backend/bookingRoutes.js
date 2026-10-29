@@ -568,6 +568,40 @@ router.post(
 );
 
 
+// Ghi nhận yêu cầu xem xét hoàn tiền; KHÔNG tự động hoàn tiền hay nhả sân.
+router.post('/bookings/:id/refund-request', requireAuth, async (req, res) => {
+  try {
+    const ref = db.collection('bookings').doc(req.params.id);
+    const result = await db.runTransaction(async tx => {
+      const doc = await tx.get(ref);
+      if (!doc.exists) return {code:404, message:'Không tìm thấy đơn.'};
+      const b = doc.data();
+      if (b.userId !== req.user.id) return {code:403, message:'Không có quyền truy cập đơn.'};
+      if (b.bookingType === 'membership' || b.paymentStatus !== 'paid' ||
+          !['confirmed','booked'].includes(b.status)) {
+        return {code:409, message:'Đơn không đủ điều kiện gửi yêu cầu hoàn tiền.'};
+      }
+      if (b.refundRequestStatus === 'pending') return {success:true, status:'pending'};
+      if (b.refundRequestStatus) return {code:409, message:'Yêu cầu đã được xử lý trước đó.'};
+      const selections = Array.isArray(b.selections) ? b.selections : [];
+      const starts = selections.map(s => Date.parse(s.date+'T'+s.startTime+':00+07:00'));
+      if (!starts.length || starts.some(t => !Number.isFinite(t)) || Math.min(...starts) <= Date.now()) {
+        return {code:409, message:'Không thể gửi yêu cầu huỷ sau khi lịch bắt đầu.'};
+      }
+      tx.update(ref, {
+        refundRequestStatus:'pending',
+        refundRequestedAt:new Date().toISOString(),
+      });
+      return {success:true, status:'pending'};
+    });
+    if (result.code) return res.status(result.code).json({success:false,message:result.message});
+    return res.json(result);
+  } catch (error) {
+    console.error('Refund request:',error);
+    return res.status(500).json({success:false,message:'Không gửi được yêu cầu.'});
+  }
+});
+
 router.get(
   '/bookings/:id/status',
   requireAuth,
