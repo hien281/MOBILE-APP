@@ -15,6 +15,7 @@ import 'map_screen.dart';
 import 'explore.dart';
 import 'my_schedule.dart';
 import 'account_screen.dart';
+import '../favorite_service.dart';
 import '../widgets/bottom_nav.dart';
 
 const Color oliveGreen = Color(0xFF35167F);
@@ -115,6 +116,29 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final Set<String> _favoriteIds = {};
 
+  Future<void> _loadFavorites() async {
+    final favs = await FavoriteService.getFavorites();
+    if (!mounted) return;
+    setState(() {
+      _favoriteIds
+        ..clear()
+        ..addAll(favs);
+    });
+  }
+
+  Future<void> _toggleFavorite(String fieldId) async {
+    final isFav = await FavoriteService.toggleFavorite(fieldId);
+    if (!mounted) return;
+    setState(() {
+      if (isFav) {
+        _favoriteIds.add(fieldId);
+      } else {
+        _favoriteIds.remove(fieldId);
+      }
+    });
+  }
+
+
   final List<String> _sports = [
     'Tất cả',
     'Bóng đá',
@@ -137,6 +161,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadFields();
     _loadLocation();
+    _loadFavorites();
     _bannerTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (!mounted || !_bannerController.hasClients) return;
       final next = (_bannerIndex + 1) % _bannerData.length;
@@ -332,26 +357,6 @@ class _HomeScreenState extends State<HomeScreen> {
     if (index == 0) setState(() => _selectedNavIndex = 0);
   }
 
-  Future<void> _showAccountDialog() async {
-    final user = FirebaseAuth.instance.currentUser;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Tài khoản SPORTY'),
-        content: Text(user?.email ?? 'Chưa có email'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Đóng')),
-          FilledButton(
-            onPressed: () async {
-              Navigator.pop(dialogContext);
-              await FirebaseAuth.instance.signOut();
-            },
-            child: const Text('Đăng xuất'),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -427,11 +432,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 currentPosition: _currentPosition,
                 accessToken: widget.accessToken,
                 favoriteIds: _favoriteIds,
-                onToggleFavorite: (id) {
-                  setState(() {
-                    if (!_favoriteIds.add(id)) _favoriteIds.remove(id);
-                  });
-                },
+                onToggleFavorite: _toggleFavorite,
               )
             else
               const SizedBox.shrink(),
@@ -458,13 +459,16 @@ class _HomeScreenState extends State<HomeScreen> {
     final photo = user?.photoURL;
     return Row(
       children: [
-        CircleAvatar(
-          radius: 21,
+        GestureDetector(
+          onTap: () => _onNavTap(4),
+          child: CircleAvatar(
+            radius: 21,
           backgroundColor: const Color(0xFFEDE7FA),
           backgroundImage: photo != null && photo.isNotEmpty ? NetworkImage(photo) : null,
           child: photo == null || photo.isEmpty
               ? const Icon(Icons.person_rounded, color: oliveGreen, size: 25)
               : null,
+          ),
         ),
         const SizedBox(width: 10),
         Expanded(
@@ -515,15 +519,7 @@ class _HomeScreenState extends State<HomeScreen> {
           currentPosition: _currentPosition,
           accessToken: widget.accessToken,
           favoriteIds: _favoriteIds,
-          onToggleFavorite: (id) {
-            setState(() {
-              if (_favoriteIds.contains(id)) {
-                _favoriteIds.remove(id);
-              } else {
-                _favoriteIds.add(id);
-              }
-            });
-          },
+          onToggleFavorite: _toggleFavorite,
         ),
       ),
     );
@@ -972,15 +968,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         minHeight: 38,
                       ),
                       padding: EdgeInsets.zero,
-                      onPressed: () {
-                        setState(() {
-                          if (isFavorite) {
-                            _favoriteIds.remove(field.id);
-                          } else {
-                            _favoriteIds.add(field.id);
-                          }
-                        });
-                      },
+                      onPressed: () => _toggleFavorite(field.id),
                       icon: Icon(
                         isFavorite
                             ? Icons.favorite_rounded
