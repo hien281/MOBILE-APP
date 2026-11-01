@@ -27,6 +27,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.initState();
     final user = FirebaseAuth.instance.currentUser;
     _nameController = TextEditingController(text: user?.displayName ?? '');
+    _nameController.addListener(() {
+      if (mounted) setState(() {});
+    });
     _emailController = TextEditingController(text: user?.email ?? '');
     _phoneController = TextEditingController();
     _dobController = TextEditingController();
@@ -164,10 +167,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-    final initialLetter = (user?.displayName?.isNotEmpty == true
-            ? user!.displayName![0]
-            : (user?.email?.isNotEmpty == true ? user!.email![0] : 'U'))
-        .toUpperCase();
+    final inputName = _nameController.text.trim();
+    final displayName = inputName.isNotEmpty
+        ? inputName
+        : (user?.displayName?.trim().isNotEmpty == true
+            ? user!.displayName!.trim()
+            : (user?.email?.split('@').first ?? 'SPORTY User'));
+    final initialLetter = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U';
 
     return Scaffold(
       backgroundColor: background,
@@ -180,7 +186,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ),
         title: const Text(
           'Thông tin tài khoản',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primary),
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primary),
         ),
         centerTitle: true,
       ),
@@ -203,29 +209,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       ),
                       child: Row(
                         children: [
-                          Stack(
-                            children: [
-                              CircleAvatar(
-                                radius: 32,
-                                backgroundColor: const Color(0xFFDFDCF9),
-                                child: Text(
-                                  initialLetter,
-                                  style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: primary),
-                                ),
-                              ),
-                              Positioned(
-                                bottom: 0,
-                                right: 0,
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: const BoxDecoration(
-                                    color: primary,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(Icons.camera_alt_rounded, size: 12, color: Colors.white),
-                                ),
-                              ),
-                            ],
+                          CircleAvatar(
+                            radius: 32,
+                            backgroundColor: const Color(0xFFDFDCF9),
+                            child: Text(
+                              initialLetter,
+                              style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: primary),
+                            ),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
@@ -233,13 +223,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  user?.displayName?.isNotEmpty == true ? user!.displayName! : 'SPORTY User',
+                                  displayName,
                                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primary),
                                 ),
                                 const SizedBox(height: 3),
                                 const Text(
-                                  'Cập nhật thông tin để đặt sân nhanh hơn',
-                                  style: TextStyle(fontSize: 11.5, color: Color(0xFF77748E)),
+                                  'Thông tin tài khoản dùng trong đặt sân và thanh toán',
+                                  style: TextStyle(fontSize: 10, color: Color(0xFF77748E)),
                                 ),
                               ],
                             ),
@@ -262,7 +252,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         children: [
                           const Text(
                             'Thông tin cá nhân',
-                            style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold, color: primary),
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: primary),
                           ),
                           const SizedBox(height: 14),
 
@@ -271,6 +261,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           const SizedBox(height: 6),
                           TextFormField(
                             controller: _nameController,
+                            style: const TextStyle(fontSize: 12, color: Color(0xFF222222)),
                             decoration: _inputDeco('Nhập họ và tên'),
                             validator: (v) => v == null || v.trim().isEmpty ? 'Vui lòng nhập họ và tên' : null,
                           ),
@@ -282,6 +273,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           TextFormField(
                             controller: _phoneController,
                             keyboardType: TextInputType.phone,
+                            style: const TextStyle(fontSize: 12, color: Color(0xFF222222)),
                             decoration: _inputDeco('Nhập số điện thoại liên hệ'),
                             validator: (v) {
                               if (v == null || v.trim().isEmpty) return 'Vui lòng nhập số điện thoại';
@@ -298,6 +290,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             controller: _dobController,
                             readOnly: true,
                             onTap: _selectDate,
+                            style: const TextStyle(fontSize: 12, color: Color(0xFF222222)),
                             decoration: _inputDeco('dd/mm/yyyy').copyWith(
                               suffixIcon: const Icon(Icons.calendar_month_outlined, color: primary, size: 20),
                             ),
@@ -310,6 +303,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           TextFormField(
                             controller: _emailController,
                             keyboardType: TextInputType.emailAddress,
+                            style: const TextStyle(fontSize: 12, color: Color(0xFF222222)),
                             decoration: _inputDeco('Nhập địa chỉ email'),
                             validator: (v) {
                               if (v == null || v.trim().isEmpty) return 'Vui lòng nhập email';
@@ -336,7 +330,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         ),
                         child: _loading
                             ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                            : const Text('Lưu thay đổi', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                            : const Text('Lưu thay đổi', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ],
@@ -349,14 +343,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Widget _buildLabel(String text) {
     return Text(
       text,
-      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Color(0xFF333333)),
+      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF333333)),
     );
   }
 
   InputDecoration _inputDeco(String hint) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(fontSize: 13, color: Color(0xFFA09EB0)),
+      hintStyle: const TextStyle(fontSize: 12, color: Color(0xFFA09EB0)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       filled: true,
       fillColor: const Color(0xFFF9FAFD),

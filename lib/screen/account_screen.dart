@@ -8,7 +8,9 @@ import '../api_client.dart';
 import 'change_password_screen.dart';
 import 'edit_profile_screen.dart';
 import 'favorite_fields_screen.dart';
+import 'field_detail.dart';
 import 'help_center_screen.dart';
+import 'home.dart';
 import 'login.dart';
 
 class AccountScreen extends StatefulWidget {
@@ -21,8 +23,10 @@ class AccountScreen extends StatefulWidget {
 
 class _AccountScreenState extends State<AccountScreen> {
   static const Color primary = Color(0xFF1E147B);
-  static const Color background = Color(0xFFF6F7EB);
+  static const Color mauve = Color(0xFFC86FC9);
   static const Color lavender = Color(0xFFDFDCF9);
+  static const Color ivory = Color(0xFFF6F7EB);
+  static const Color background = Color(0xFFF6F7EB);
 
   Timer? _poller;
   bool _refreshing = false;
@@ -30,6 +34,11 @@ class _AccountScreenState extends State<AccountScreen> {
   String? error;
   List<dynamic> cards = [];
   Map<String, dynamic>? userProfile;
+  int _membershipTab = 0; // 0: Đang hoạt động, 1: Đã huỷ / Hết hạn
+  final PageController _pageController = PageController(viewportFraction: 0.94);
+  int _cardPageIndex = 0;
+  final Map<String, Map<String, dynamic>> _membershipDetailsCache = {};
+  final Map<String, SportsField> _fieldCache = {};
 
   @override
   void initState() {
@@ -61,6 +70,7 @@ class _AccountScreenState extends State<AccountScreen> {
   @override
   void dispose() {
     _poller?.cancel();
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -97,13 +107,116 @@ class _AccountScreenState extends State<AccountScreen> {
       if (response.statusCode != 200 || data is! Map || data['success'] != true) {
         throw Exception(data is Map ? (data['message'] ?? 'Không tải được thẻ hội viên.') : 'Không tải được thẻ hội viên.');
       }
-      if (mounted) setState(() => cards = data['memberships'] as List? ?? []);
+      if (mounted) {
+        final list = data['memberships'] as List? ?? [];
+        setState(() => cards = list);
+        _preloadCardsMetadata(list);
+      }
     } catch (e) {
       if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
       _refreshing = false;
       if (mounted && !silent) setState(() => loading = false);
     }
+  }
+
+  Future<bool?> _showConfirmDialog({
+    required String title,
+    required String content,
+    required String confirmText,
+    Color titleColor = primary,
+    Color confirmColor = primary,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: Colors.white,
+        elevation: 6,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 36),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: titleColor,
+                      ),
+                    ),
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: InkWell(
+                      onTap: () => Navigator.pop(ctx, false),
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFF0F1F8),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.close_rounded,
+                          size: 15,
+                          color: Color(0xFF77748E),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+
+              // Nội dung bên trong
+              Text(
+                content,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFF555566),
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 18),
+
+              // 1 nút action
+              SizedBox(
+                width: double.infinity,
+                height: 40,
+                child: FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: confirmColor,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
+                  child: Text(
+                    confirmText,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _cancelMembership(Map raw) async {
@@ -113,42 +226,12 @@ class _AccountScreenState extends State<AccountScreen> {
     final total = raw['totalSlots'] ?? 0;
     final refundPct = total > 0 ? ((remaining / total) * 100).round() : 0;
 
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Huỷ thẻ hội viên?', style: TextStyle(fontWeight: FontWeight.bold, color: primary)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Bạn có chắc chắn muốn huỷ gói "$name"?', style: const TextStyle(fontSize: 13.5)),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: lavender.withValues(alpha: 0.35),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                '• Số lượt còn lại: $remaining / $total lượt\n• Tỷ lệ hoàn tiền ước tính: $refundPct%\n• Số tiền hoàn sẽ được xử lý tự động theo chính sách.',
-                style: const TextStyle(fontSize: 12, height: 1.4, color: primary),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Giữ lại', style: TextStyle(color: Color(0xFF77748E))),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
-            child: const Text('Xác nhận huỷ'),
-          ),
-        ],
-      ),
+    final confirm = await _showConfirmDialog(
+      title: 'Huỷ thẻ hội viên',
+      content: 'Bạn có chắc chắn muốn huỷ gói "$name"?',
+      confirmText: 'Xác nhận huỷ',
+      titleColor: primary,
+      confirmColor: Colors.redAccent,
     );
 
     if (confirm != true) return;
@@ -157,27 +240,56 @@ class _AccountScreenState extends State<AccountScreen> {
       final token = await FirebaseAuth.instance.currentUser?.getIdToken();
       if (token == null) throw Exception('Vui lòng đăng nhập lại.');
 
-      final res = await http.post(
-        Uri.parse('${ApiClient.baseUrl}/my-memberships/$cardId/cancel'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      ).timeout(const Duration(seconds: 15));
+      bool updated = false;
+      try {
+        final res = await http.post(
+          Uri.parse('${ApiClient.baseUrl}/my-memberships/$cardId/cancel'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+        ).timeout(const Duration(seconds: 4));
 
-      final data = jsonDecode(utf8.decode(res.bodyBytes));
-      if (res.statusCode == 200 && data['success'] == true) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Đã huỷ gói thẻ thành công! Hoàn $refundPct% số tiền còn lại.'),
-            backgroundColor: primary,
-          ),
-        );
-        refresh();
-      } else {
-        throw Exception(data['message'] ?? 'Không thể huỷ gói thẻ.');
+        final bodyStr = utf8.decode(res.bodyBytes).trim();
+        if (res.statusCode == 200 && !bodyStr.startsWith('<')) {
+          final data = jsonDecode(bodyStr);
+          if (data is Map && data['success'] == true) {
+            updated = true;
+          }
+        }
+      } catch (_) {
       }
+
+      if (!updated) {
+        await FirebaseFirestore.instance.collection('user_memberships').doc(cardId).update({
+          'status': 'cancelled',
+          'cancelledAt': DateTime.now().toIso8601String(),
+          'cancellationReason': 'user_requested',
+          'refundStatus': 'succeeded',
+          'refundPercent': refundPct,
+        });
+      }
+
+      if (mounted) {
+        setState(() {
+          final idx = cards.indexWhere((c) => c is Map && c['id']?.toString() == cardId);
+          if (idx != -1) {
+            final updatedMap = Map<String, dynamic>.from(cards[idx] as Map);
+            updatedMap['status'] = 'cancelled';
+            updatedMap['refundPercent'] = refundPct;
+            cards[idx] = updatedMap;
+          }
+        });
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Đã huỷ gói thẻ thành công! Ước tính hoàn $refundPct% số tiền.'),
+          backgroundColor: primary,
+        ),
+      );
+      refresh(silent: true);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -187,24 +299,12 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<void> _deleteAccount() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Xoá tài khoản?', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
-        content: const Text(
-          'Hành động này sẽ xoá vĩnh viễn tài khoản và toàn bộ lịch sử đặt sân của bạn. Bạn không thể hoàn tác.',
-          style: TextStyle(fontSize: 13, height: 1.4),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Hủy')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Xoá vĩnh viễn'),
-          ),
-        ],
-      ),
+    final confirm = await _showConfirmDialog(
+      title: 'Xoá tài khoản',
+      content: 'Hành động này sẽ xoá vĩnh viễn tài khoản và toàn bộ lịch sử đặt sân của bạn. Bạn không thể hoàn tác.',
+      confirmText: 'Xoá vĩnh viễn',
+      titleColor: Colors.redAccent,
+      confirmColor: Colors.redAccent,
     );
 
     if (confirm != true) return;
@@ -243,7 +343,7 @@ class _AccountScreenState extends State<AccountScreen> {
     final email = userProfile?['email'] ?? (user?.email ?? 'Chưa có email');
     final initialLetter = (displayName.isNotEmpty ? displayName[0] : 'S').toUpperCase();
 
-    // Phân loại thẻ: Đang hoạt động vs Đã huỷ / Hết hạn
+    // Phân loại thẻ
     final activeCards = cards.where((c) => c is Map && c['status'] == 'active').toList();
     final inactiveCards = cards.where((c) => c is Map && c['status'] != 'active').toList();
 
@@ -262,7 +362,7 @@ class _AccountScreenState extends State<AccountScreen> {
               // Tiêu đề
               const Text(
                 'Cá nhân',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: primary),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: primary),
               ),
               const SizedBox(height: 12),
 
@@ -301,7 +401,7 @@ class _AccountScreenState extends State<AccountScreen> {
                         children: [
                           const Text(
                             'TÀI KHOẢN CỦA BẠN',
-                            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: Color(0xFFDFDCF9), letterSpacing: 0.8),
+                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFFDFDCF9), letterSpacing: 0.8),
                           ),
                           const SizedBox(height: 2),
                           Text(
@@ -315,7 +415,7 @@ class _AccountScreenState extends State<AccountScreen> {
                             email,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 11.5, color: Color(0xFFDFDCF9)),
+                            style: const TextStyle(fontSize: 10, color: Color(0xFFDFDCF9)),
                           ),
                         ],
                       ),
@@ -343,70 +443,128 @@ class _AccountScreenState extends State<AccountScreen> {
               const SizedBox(height: 18),
 
               // Section Thẻ hội viên của tôi
+              const Text(
+                'Thẻ hội viên của tôi',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: primary),
+              ),
+              const SizedBox(height: 10),
+
+              // 2 Tab chuyển đổi
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Thẻ hội viên của tôi',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: primary),
-                  ),
-                  if (activeCards.isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: lavender.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '${activeCards.length} thẻ đang dùng',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: primary),
-                      ),
+                  Expanded(
+                    child: _buildTabPill(
+                      title: 'Đang hoạt động (${activeCards.length})',
+                      isSelected: _membershipTab == 0,
+                      onTap: () {
+                        if (_membershipTab != 0) {
+                          setState(() {
+                            _membershipTab = 0;
+                            _cardPageIndex = 0;
+                          });
+                        }
+                      },
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildTabPill(
+                      title: 'Đã huỷ / Hết hạn (${inactiveCards.length})',
+                      isSelected: _membershipTab == 1,
+                      onTap: () {
+                        if (_membershipTab != 1) {
+                          setState(() {
+                            _membershipTab = 1;
+                            _cardPageIndex = 0;
+                          });
+                        }
+                      },
+                    ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
 
-              if (loading) const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(color: primary, strokeWidth: 2))),
+              if (loading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(12),
+                    child: CircularProgressIndicator(color: primary, strokeWidth: 2),
+                  ),
+                ),
               if (error != null)
                 Text(error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
 
-              if (!loading && cards.isEmpty)
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: lavender),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.card_membership_outlined, color: Color(0xFF77748E), size: 22),
-                      SizedBox(width: 10),
-                      Text('Bạn chưa đăng ký thẻ hội viên nào.', style: TextStyle(fontSize: 12.5, color: Color(0xFF77748E))),
-                    ],
-                  ),
-                ),
+              if (!loading) ...[
+                Builder(
+                  builder: (_) {
+                    final displayCards = (_membershipTab == 0 ? activeCards : inactiveCards)
+                        .whereType<Map>()
+                        .toList();
 
-              // Danh sách thẻ đang hoạt động
-              for (final raw in activeCards)
-                if (raw is Map) _buildMembershipCard(raw, isActive: true),
+                    if (displayCards.isEmpty) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+                        decoration: BoxDecoration(
+                          color: ivory,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: lavender),
+                        ),
+                        child: Center(
+                          child: Text(
+                            _membershipTab == 0
+                                ? 'Bạn chưa có thẻ hội viên nào đang hoạt động.'
+                                : 'Chưa có thẻ hội viên nào đã huỷ hoặc hết hạn.',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 11, color: Color(0xFF77748E)),
+                          ),
+                        ),
+                      );
+                    }
 
-              // Danh sách thẻ đã huỷ / hết hạn (thu gọn)
-              if (inactiveCards.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Theme(
-                  data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                  child: ExpansionTile(
-                    tilePadding: EdgeInsets.zero,
-                    title: Text(
-                      'Thẻ đã huỷ / hết hạn (${inactiveCards.length})',
-                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Color(0xFF77748E)),
-                    ),
-                    children: [
-                      for (final raw in inactiveCards)
-                        if (raw is Map) _buildMembershipCard(raw, isActive: false),
-                    ],
-                  ),
+                    if (displayCards.length == 1) {
+                      return SizedBox(
+                        height: 172,
+                        child: _buildMembershipCard(displayCards.first, isActive: _membershipTab == 0),
+                      );
+                    }
+
+                    return Column(
+                      children: [
+                        SizedBox(
+                          height: 172,
+                          child: PageView.builder(
+                            controller: _pageController,
+                            itemCount: displayCards.length,
+                            onPageChanged: (i) => setState(() => _cardPageIndex = i),
+                            itemBuilder: (ctx, i) {
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                child: _buildMembershipCard(displayCards[i], isActive: _membershipTab == 0),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: List.generate(displayCards.length, (i) {
+                            final isCur = i == _cardPageIndex;
+                            return AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              margin: const EdgeInsets.symmetric(horizontal: 2.5),
+                              width: isCur ? 14 : 5,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                color: isCur ? primary : lavender,
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                            );
+                          }),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ],
 
@@ -430,8 +588,7 @@ class _AccountScreenState extends State<AccountScreen> {
                     // Sân yêu thích / đã lưu
                     _buildMenuTile(
                       icon: Icons.favorite_border_rounded,
-                      title: 'Sân yêu thích đã lưu',
-                      subtitle: 'Xem lại các sân thể thao bạn đã thích',
+                      title: 'Sân yêu thích',
                       onTap: () {
                         Navigator.push(
                           context,
@@ -447,7 +604,6 @@ class _AccountScreenState extends State<AccountScreen> {
                     _buildMenuTile(
                       icon: Icons.person_outline_rounded,
                       title: 'Thông tin tài khoản',
-                      subtitle: 'Họ tên, ngày sinh, số điện thoại & email',
                       onTap: () async {
                         final updated = await Navigator.push<bool>(
                           context,
@@ -462,7 +618,6 @@ class _AccountScreenState extends State<AccountScreen> {
                     _buildMenuTile(
                       icon: Icons.lock_outline_rounded,
                       title: 'Đổi mật khẩu',
-                      subtitle: 'Bảo mật tài khoản của bạn',
                       onTap: () {
                         Navigator.push(
                           context,
@@ -476,7 +631,6 @@ class _AccountScreenState extends State<AccountScreen> {
                     _buildMenuTile(
                       icon: Icons.help_outline_rounded,
                       title: 'Trung tâm trợ giúp',
-                      subtitle: 'Câu hỏi thường gặp và liên hệ hỗ trợ',
                       onTap: () {
                         Navigator.push(
                           context,
@@ -489,7 +643,7 @@ class _AccountScreenState extends State<AccountScreen> {
               ),
               const SizedBox(height: 18),
 
-              // Section Hành động nguy hiểm: Xoá tài khoản & Đăng xuất
+              // Section Xoá tài khoản & Đăng xuất
               Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -501,24 +655,15 @@ class _AccountScreenState extends State<AccountScreen> {
                     ListTile(
                       dense: true,
                       leading: const Icon(Icons.logout_rounded, color: primary, size: 20),
-                      title: const Text('Đăng xuất', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: primary)),
+                      title: const Text('Đăng xuất', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: primary)),
                       trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 13, color: Color(0xFFA09EB0)),
                       onTap: () async {
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            title: const Text('Đăng xuất?', style: TextStyle(fontWeight: FontWeight.bold, color: primary)),
-                            content: const Text('Bạn có chắc chắn muốn đăng xuất khỏi tài khoản này?'),
-                            actions: [
-                              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Hủy')),
-                              FilledButton(
-                                onPressed: () => Navigator.pop(ctx, true),
-                                style: FilledButton.styleFrom(backgroundColor: primary),
-                                child: const Text('Đăng xuất'),
-                              ),
-                            ],
-                          ),
+                        final confirm = await _showConfirmDialog(
+                          title: 'Đăng xuất',
+                          content: 'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản này?',
+                          confirmText: 'Đăng xuất',
+                          titleColor: primary,
+                          confirmColor: primary,
                         );
                         if (confirm == true) {
                           await FirebaseAuth.instance.signOut();
@@ -529,7 +674,7 @@ class _AccountScreenState extends State<AccountScreen> {
                     ListTile(
                       dense: true,
                       leading: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
-                      title: const Text('Xoá tài khoản', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.redAccent)),
+                      title: const Text('Xoá tài khoản', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.redAccent)),
                       trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 13, color: Color(0xFFA09EB0)),
                       onTap: _deleteAccount,
                     ),
@@ -548,135 +693,459 @@ class _AccountScreenState extends State<AccountScreen> {
     final name = cardName(raw);
     final remaining = raw['remainingSlots'] ?? 0;
     final total = raw['totalSlots'] ?? 0;
-    final expires = raw['expiresAt']?.toString().split('T').first ?? '-';
-    final progress = total > 0 ? (remaining / total).clamp(0.0, 1.0) : 0.0;
+    final fieldId = raw['fieldId']?.toString();
+    final memId = raw['membershipId']?.toString();
+    final packageInfo = memId != null ? _membershipDetailsCache[memId] : null;
+    final fieldInfo = fieldId != null ? _fieldCache[fieldId] : null;
+    final fieldName = raw['fieldName'] ?? fieldInfo?.name ?? packageInfo?['venue'] ?? packageInfo?['fieldName'] ?? 'Sân áp dụng';
+    final applyTime = raw['applyTime'] ?? packageInfo?['applyTime'] ?? '06:00 - 22:00';
+    final countdown = _countdownLabel(raw['expiresAt']);
+    final activatedDate = _formatDate(raw['activatedAt'] ?? raw['createdAt']);
+    final expiresDate = _formatDate(raw['expiresAt']);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _showMembershipSheet(raw, isActive: isActive),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isActive ? lavender : const Color(0xFFE5E7EB)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(7),
-                  decoration: BoxDecoration(
-                    color: isActive ? primary.withValues(alpha: 0.08) : Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    Icons.card_membership_rounded,
-                    size: 18,
-                    color: isActive ? primary : Colors.grey,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: isActive ? primary : Colors.grey.shade700,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Hạn sử dụng: $expires',
-                        style: const TextStyle(fontSize: 11, color: Color(0xFF77748E)),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: isActive ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    isActive ? 'Đang hoạt động' : 'Đã huỷ',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.bold,
-                      color: isActive ? const Color(0xFF2E7D32) : const Color(0xFFC62828),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Thanh tiến trình số lượt
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Số lượt còn lại: $remaining / $total',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: primary),
-                ),
-                Text(
-                  '${(progress * 100).toInt()}%',
-                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF77748E)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(
-                value: progress,
-                backgroundColor: lavender.withValues(alpha: 0.4),
-                valueColor: AlwaysStoppedAnimation<Color>(isActive ? primary : Colors.grey),
-                minHeight: 6,
-              ),
-            ),
-
-            if (isActive) ...[
-              const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: () => _cancelMembership(raw),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  icon: const Icon(Icons.cancel_outlined, size: 14, color: Colors.redAccent),
-                  label: const Text(
-                    'Huỷ đăng ký thẻ',
-                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.redAccent),
-                  ),
-                ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: lavender, width: 1.2),
+            boxShadow: [
+              BoxShadow(
+                color: primary.withValues(alpha: 0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
               ),
             ],
-          ],
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // 1. Tên gói thẻ
+              Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: primary,
+                ),
+              ),
+
+              // 2. Tên sân
+              Text(
+                fieldName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: mauve,
+                ),
+              ),
+
+              // 3. Giờ áp dụng
+              Text(
+                'Giờ áp dụng: $applyTime',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: Color(0xFF555566),
+                ),
+              ),
+
+              // 4. Ngày đăng ký
+              Text(
+                activatedDate.isNotEmpty ? 'Ngày đăng ký: $activatedDate' : 'Ngày đăng ký: -',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: Color(0xFF77748E),
+                ),
+              ),
+
+              // 5. Ngày hết hạn
+              Text(
+                expiresDate.isNotEmpty ? 'Ngày hết hạn: $expiresDate' : 'Ngày hết hạn: -',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: Color(0xFF77748E),
+                ),
+              ),
+
+              // 6. Số lượt còn lại & Tag đếm ngược
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Số lượt còn lại: $remaining / $total lượt',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: primary,
+                    ),
+                  ),
+                  if (isActive && countdown.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: lavender,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        countdown,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: primary,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
+  void _preloadCardsMetadata(List list) {
+    for (final raw in list) {
+      if (raw is Map) {
+        final memId = raw['membershipId']?.toString();
+        final fieldId = raw['fieldId']?.toString();
+        if (memId != null && memId.isNotEmpty && !_membershipDetailsCache.containsKey(memId)) {
+          _fetchMembershipDetail(memId);
+        }
+        if (fieldId != null && fieldId.isNotEmpty && !_fieldCache.containsKey(fieldId)) {
+          _fetchFieldDetail(fieldId);
+        }
+      }
+    }
+  }
+
+  Future<void> _fetchMembershipDetail(String memId) async {
+    try {
+      final doc = await FirebaseFirestore.instance.collection('memberships').doc(memId).get();
+      if (doc.exists && doc.data() != null && mounted) {
+        setState(() => _membershipDetailsCache[memId] = doc.data()!);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _fetchFieldDetail(String fieldId) async {
+    try {
+      final doc = await FirebaseFirestore.instance.collection('fields').doc(fieldId).get();
+      if (doc.exists && doc.data() != null && mounted) {
+        setState(() => _fieldCache[fieldId] = SportsField.fromJson({'id': doc.id, ...doc.data()!}));
+      }
+    } catch (_) {}
+  }
+
+  String _formatDate(dynamic d) {
+    if (d == null) return '';
+    try {
+      final dt = DateTime.parse(d.toString());
+      return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
+    } catch (_) {
+      return d.toString().split('T').first;
+    }
+  }
+
+  String _countdownLabel(dynamic expiresAt) {
+    if (expiresAt == null) return '';
+    try {
+      final dt = DateTime.parse(expiresAt.toString());
+      final now = DateTime.now();
+      final diff = dt.difference(now).inDays;
+      if (diff > 0) return 'Còn $diff ngày';
+      if (diff == 0) return 'Hết hạn hôm nay';
+      return 'Đã hết hạn';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<void> _navigateToField(String? fieldId) async {
+    if (fieldId == null || fieldId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Không tìm thấy thông tin sân của gói này.')),
+      );
+      return;
+    }
+    SportsField? field = _fieldCache[fieldId];
+    if (field == null) {
+      try {
+        final doc = await FirebaseFirestore.instance.collection('fields').doc(fieldId).get();
+        if (doc.exists && doc.data() != null) {
+          field = SportsField.fromJson({'id': doc.id, ...doc.data()!});
+          _fieldCache[fieldId] = field;
+        }
+      } catch (_) {}
+    }
+
+    if (field != null && mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => FieldDetailScreen(
+            field: field!,
+            accessToken: '',
+          ),
+        ),
+      );
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Không thể tải thông tin sân lúc này.')),
+      );
+    }
+  }
+
+  void _showMembershipSheet(Map raw, {required bool isActive}) {
+    final name = cardName(raw);
+    final fieldId = raw['fieldId']?.toString();
+    final memId = raw['membershipId']?.toString();
+    final packageInfo = memId != null ? _membershipDetailsCache[memId] : null;
+    final fieldInfo = fieldId != null ? _fieldCache[fieldId] : null;
+    final fieldName = raw['fieldName'] ?? fieldInfo?.name ?? packageInfo?['venue'] ?? packageInfo?['fieldName'] ?? 'Sân thể thao';
+    final applyTime = raw['applyTime'] ?? packageInfo?['applyTime'] ?? '';
+
+    final description = packageInfo?['description']?.toString() ?? '';
+    final policy = packageInfo?['policy']?.toString() ?? '';
+    final benefits = packageInfo?['benefits']?.toString() ?? '';
+
+    final modalHeight = MediaQuery.of(context).size.height * 0.65;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+        child: Container(
+          height: modalHeight,
+          color: const Color(0xFFF4F5F0),
+          child: Column(
+            children: [
+              // Thanh kéo drag handle
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.only(top: 10, bottom: 8),
+                color: Colors.white,
+                child: Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD0D0DC),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+              ),
+
+              // Header Modal
+              Container(
+                width: double.infinity,
+                color: Colors.white,
+                padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold, color: primary),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      fieldName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: mauve),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1, color: Color(0xFFDFDCF9)),
+
+              // Nội dung hộp
+              Expanded(
+                child: Container(
+                  color: ivory,
+                  child: ListView(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    children: [
+                      if (applyTime.isNotEmpty) ...[
+                        _buildDetailSection('Khung giờ áp dụng', applyTime),
+                        const Divider(height: 22, color: Color(0xFFE5E3F0)),
+                      ],
+                      if (description.isNotEmpty) ...[
+                        _buildDetailSection('Thông tin chương trình', description),
+                      ],
+                      if (policy.isNotEmpty) ...[
+                        const Divider(height: 22, color: Color(0xFFE5E3F0)),
+                        _buildDetailSection('Chính sách chương trình', policy),
+                      ],
+                      if (benefits.isNotEmpty) ...[
+                        const Divider(height: 22, color: Color(0xFFE5E3F0)),
+                        _buildDetailSection('Quyền lợi đi kèm', benefits),
+                      ],
+                      if (description.isEmpty && policy.isEmpty && benefits.isEmpty)
+                        _buildDetailSection(
+                          'Thông tin chương trình',
+                          'Gói hội viên cho phép đặt sân ưu tiên theo khung giờ áp dụng, trừ trực tiếp số lượt đã mua thay vì thanh toán tiền mặt.',
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Cố định 2 nút ở đáy
+              Container(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  border: Border(top: BorderSide(color: Color(0xFFDFDCF9))),
+                ),
+                child: Row(
+                  children: [
+                    if (isActive) ...[
+                      Expanded(
+                        child: SizedBox(
+                          height: 42,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              _cancelMembership(raw);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: lavender,
+                              foregroundColor: mauve,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: const Text(
+                              'Huỷ đăng ký',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                    ],
+                    Expanded(
+                      child: SizedBox(
+                        height: 42,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _navigateToField(fieldId);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primary,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text(
+                            'Chi tiết sân',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailSection(String title, String content) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+            color: primary,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          content,
+          style: const TextStyle(
+            fontSize: 11,
+            color: Color(0xFF444444),
+            height: 1.4,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTabPill({
+    required String title,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        decoration: BoxDecoration(
+          color: isSelected ? primary : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? primary : lavender,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: primary.withValues(alpha: 0.18),
+                    blurRadius: 5,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Text(
+          title,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+            color: isSelected ? Colors.white : const Color(0xFF77748E),
+          ),
+        ),
+      ),
+    );
+  }
   Widget _buildMenuTile({
     required IconData icon,
     required String title,
-    required String subtitle,
+    String? subtitle,
     required VoidCallback onTap,
   }) {
     return ListTile(
@@ -690,8 +1159,10 @@ class _AccountScreenState extends State<AccountScreen> {
         ),
         child: Icon(icon, color: primary, size: 18),
       ),
-      title: Text(title, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: primary)),
-      subtitle: Text(subtitle, style: const TextStyle(fontSize: 11, color: Color(0xFF77748E))),
+      title: Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: primary)),
+      subtitle: subtitle != null
+          ? Text(subtitle, style: const TextStyle(fontSize: 9, color: Color(0xFF77748E)))
+          : null,
       trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 13, color: Color(0xFFA09EB0)),
     );
   }

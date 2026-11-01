@@ -11,19 +11,19 @@ class HelpCenterScreen extends StatelessWidget {
     final faqs = [
       {
         'q': 'Làm sao để đặt sân thể thao?',
-        'a': 'Bạn chỉ cần chọn sân yêu thích tại Trang chủ hoặc Bản đồ, chọn khung giờ còn trống và tiến hành thanh toán hoặc đặt lịch.'
+        'a': 'Bạn chỉ cần chọn sân yêu thích tại Trang chủ hoặc Bản đồ, chọn khung giờ còn trống và tiến hành thanh toán đặt lịch.'
       },
       {
         'q': 'Thẻ hội viên hoạt động như thế nào?',
-        'a': 'Khi mua gói thẻ hội viên tại mục Khám phá, bạn sẽ được cấp trước số lượt đặt sân nhất định. Khi đặt sân, hệ thống sẽ trừ trực tiếp vào số lượt của thẻ thay vì trừ tiền.'
+        'a': 'Khi mua gói thẻ hội viên tại mục Khám phá, bạn sẽ được cấp trước số lượt đặt sân nhất định. Khi đặt sân, hệ thống sẽ trừ trực tiếp vào số lượt của thẻ tại sân đó.'
       },
       {
         'q': 'Chính sách hủy sân và hoàn tiền ra sao?',
-        'a': 'Bạn có thể hủy lịch đặt trước ít nhất 24 giờ so với giờ bắt đầu để được hoàn tiền đầy đủ hoặc hoàn lại lượt đặt thẻ hội viên.'
+        'a': 'Bạn chỉ có thể hủy lịch đặt trước ít nhất 24 giờ so với giờ bắt đầu để được hoàn tiền đầy đủ.'
       },
       {
         'q': 'Tôi muốn liên hệ hỗ trợ trực tiếp?',
-        'a': 'Bạn có thể gọi hotline: 1900 6868 hoặc gửi email về support@sporty.vn (Hoạt động từ 8:00 - 22:00 hàng ngày).'
+        'a': 'Bạn có thể liên hệ Sproty bằng hotline hoặc email. \n(Hoạt động từ 8:00 - 21:00 hàng ngày)'
       },
     ];
 
@@ -38,7 +38,7 @@ class HelpCenterScreen extends StatelessWidget {
         ),
         title: const Text(
           'Trung tâm trợ giúp',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primary),
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primary),
         ),
         centerTitle: true,
       ),
@@ -67,9 +67,9 @@ class HelpCenterScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Chúng tôi luôn sẵn sàng hỗ trợ!', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: primary)),
+                      Text('Sporty luôn sẵn sàng hỗ trợ!', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: primary)),
                       SizedBox(height: 2),
-                      Text('Hotline: 1900 6868 · support@sporty.vn', style: TextStyle(fontSize: 11.5, color: Color(0xFF77748E))),
+                      Text('Hotline: 0123 456 789 \nEmail: support@sporty.vn', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF77748E))),
                     ],
                   ),
                 ),
@@ -91,11 +91,11 @@ class HelpCenterScreen extends StatelessWidget {
                 tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
                 shape: const Border(),
                 collapsedShape: const Border(),
-                title: Text(faq['q']!, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: primary)),
+                title: Text(faq['q']!, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: primary)),
                 children: [
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-                    child: Text(faq['a']!, style: const TextStyle(fontSize: 12.5, color: Color(0xFF555555), height: 1.4)),
+                    child: Text(faq['a']!, style: const TextStyle(fontSize: 12, color: Color(0xFF555555), height: 1.4)),
                   ),
                 ],
               ),

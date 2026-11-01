@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../api_client.dart';
 import '../favorite_service.dart';
-import 'booking.dart';
 import 'field_detail.dart';
 import 'home.dart';
 
@@ -42,8 +41,17 @@ class _FavoriteFieldsScreenState extends State<FavoriteFieldsScreen> {
 
       final res = await http.get(Uri.parse('${ApiClient.baseUrl}/fields'));
       if (res.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(utf8.decode(res.bodyBytes));
-        final all = data.map((json) => SportsField.fromJson(json)).toList();
+        final decoded = jsonDecode(utf8.decode(res.bodyBytes));
+        List<dynamic> listData = [];
+        if (decoded is List) {
+          listData = decoded;
+        } else if (decoded is Map && decoded['fields'] is List) {
+          listData = decoded['fields'];
+        }
+        final all = listData
+            .whereType<Map>()
+            .map((item) => SportsField.fromJson(Map<String, dynamic>.from(item)))
+            .toList();
         final favList = all.where((f) => favIds.contains(f.id)).toList();
         if (mounted) {
           setState(() {
@@ -74,7 +82,7 @@ class _FavoriteFieldsScreenState extends State<FavoriteFieldsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Đã bỏ yêu thích ${field.name}'),
-        duration: const Duration(seconds: 2),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -104,7 +112,7 @@ class _FavoriteFieldsScreenState extends State<FavoriteFieldsScreen> {
         ),
         title: const Text(
           'Sân yêu thích',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primary),
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primary),
         ),
         centerTitle: true,
       ),
@@ -144,12 +152,6 @@ class _FavoriteFieldsScreenState extends State<FavoriteFieldsScreen> {
                             'Chưa có sân yêu thích',
                             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primary),
                           ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Nhấn vào biểu tượng trái tim ở các sân để lưu lại xem sau nhé!',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 13, color: Color(0xFF77748E)),
-                          ),
                         ],
                       ),
                     )
@@ -166,153 +168,145 @@ class _FavoriteFieldsScreenState extends State<FavoriteFieldsScreen> {
 
   Widget _buildCard(SportsField field) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
+      margin: const EdgeInsets.only(bottom: 12),
+      height: 104,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: const Color(0xFFDFDCF9)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
-            offset: const Offset(0, 4),
+            offset: const Offset(0, 3),
           ),
         ],
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => FieldDetailScreen(
-                field: field,
-                accessToken: widget.accessToken,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => FieldDetailScreen(
+                  field: field,
+                  accessToken: widget.accessToken,
+                ),
               ),
-            ),
-          );
-        },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(17)),
+            );
+          },
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ClipRRect(
+                borderRadius: const BorderRadius.horizontal(left: Radius.circular(17)),
+                child: SizedBox(
+                  width: 104,
+                  height: 104,
                   child: Image.network(
                     field.imageUrl,
-                    height: 150,
-                    width: double.infinity,
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) => Container(
-                      height: 150,
                       color: const Color(0xFFE8EDDF),
                       child: const Center(
-                        child: Icon(Icons.sports_rounded, size: 40, color: primary),
+                        child: Icon(Icons.sports_rounded, color: primary, size: 28),
                       ),
                     ),
                   ),
                 ),
-                Positioned(
-                  top: 10,
-                  right: 10,
-                  child: Material(
-                    color: Colors.white,
-                    shape: const CircleBorder(),
-                    child: IconButton(
-                      icon: const Icon(Icons.favorite_rounded, color: Colors.redAccent, size: 20),
-                      onPressed: () => _toggleFavorite(field),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: primary.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          field.sport,
-                          style: const TextStyle(color: primary, fontSize: 11, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      const Spacer(),
-                      const Icon(Icons.star_rounded, color: Color(0xFFF4B740), size: 16),
-                      const SizedBox(width: 3),
-                      Text(
-                        field.rating.toStringAsFixed(1),
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: primary),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    field.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: primary),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(Icons.location_on_outlined, color: Color(0xFF77748E), size: 14),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          field.address,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 11.5, color: Color(0xFF77748E)),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        '${_formatPrice(field.price)}đ / giờ',
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: primary),
-                      ),
-                      FilledButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => BookingScreen(
-                                fieldId: field.id,
-                                fieldName: field.name,
-                                price: field.price,
-                                baseUrl: ApiClient.baseUrl,
-                                accessToken: widget.accessToken,
+                      // Badge môn, sao & icon tim bỏ yêu thích
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color.fromARGB(255, 53, 22, 127),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              field.sport,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.w800,
                               ),
                             ),
-                          );
-                        },
-                        style: FilledButton.styleFrom(
-                          backgroundColor: primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          const SizedBox(width: 6),
+                          const Icon(Icons.star_rounded, color: Color(0xFFF4B740), size: 14),
+                          const SizedBox(width: 2),
+                          Text(
+                            field.rating.toStringAsFixed(1),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: primary,
+                            ),
+                          ),
+                          const Spacer(),
+                          InkWell(
+                            onTap: () => _toggleFavorite(field),
+                            child: const Padding(
+                              padding: EdgeInsets.all(2),
+                              child: Icon(Icons.favorite_rounded, color: Colors.redAccent, size: 18),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      // Tên sân
+                      Text(
+                        field.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: primary,
                         ),
-                        child: const Text('Đặt sân', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      ),
+
+                      // Địa chỉ
+                      Text(
+                        field.address,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 8.5,
+                          color: Color(0xFF77748E),
+                        ),
+                      ),
+
+                      // Giá
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '${_formatPrice(field.price)}đ / giờ',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                              color: primary,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

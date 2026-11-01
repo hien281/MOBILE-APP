@@ -91,7 +91,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         ),
         title: const Text(
           'Đổi mật khẩu',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primary),
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primary),
         ),
         centerTitle: true,
       ),
@@ -114,12 +114,12 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                   children: [
                     const Text(
                       'Bảo mật tài khoản',
-                      style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold, color: primary),
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: primary),
                     ),
                     const SizedBox(height: 4),
                     const Text(
                       'Tạo mật khẩu an toàn có ít nhất 6 ký tự để bảo vệ tài khoản của bạn',
-                      style: TextStyle(fontSize: 11.5, color: Color(0xFF77748E)),
+                      style: TextStyle(fontSize: 10, color: Color(0xFF77748E)),
                     ),
                     const SizedBox(height: 16),
 
@@ -129,6 +129,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     TextFormField(
                       controller: _oldPassController,
                       obscureText: _obscureOld,
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF222222)),
                       decoration: _inputDeco('Nhập mật khẩu hiện tại').copyWith(
                         suffixIcon: IconButton(
                           icon: Icon(_obscureOld ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18, color: Colors.grey),
@@ -145,6 +146,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     TextFormField(
                       controller: _newPassController,
                       obscureText: _obscureNew,
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF222222)),
                       decoration: _inputDeco('Nhập mật khẩu mới').copyWith(
                         suffixIcon: IconButton(
                           icon: Icon(_obscureNew ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18, color: Colors.grey),
@@ -165,6 +167,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     TextFormField(
                       controller: _confirmPassController,
                       obscureText: _obscureConfirm,
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF222222)),
                       decoration: _inputDeco('Xác nhận lại mật khẩu mới').copyWith(
                         suffixIcon: IconButton(
                           icon: Icon(_obscureConfirm ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18, color: Colors.grey),
@@ -195,7 +198,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                   ),
                   child: _loading
                       ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : const Text('Cập nhật mật khẩu', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                      : const Text('Cập nhật mật khẩu', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -208,14 +211,14 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   Widget _buildLabel(String text) {
     return Text(
       text,
-      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Color(0xFF333333)),
+      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF333333)),
     );
   }
 
   InputDecoration _inputDeco(String hint) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(fontSize: 13, color: Color(0xFFA09EB0)),
+      hintStyle: const TextStyle(fontSize: 12, color: Color(0xFFA09EB0)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       filled: true,
       fillColor: const Color(0xFFF9FAFD),
