@@ -1,6 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const admin = require('firebase-admin');
+const { FieldValue } = require('firebase-admin/firestore');
 const { db } = require('./firebase');
 const { requireAuth } = require('./authMiddleware');
 const router = express.Router();
@@ -15,13 +16,24 @@ router.post('/push/register', requireAuth, async (req, res) => {
     if (!validToken(token)) return res.status(400).json({success:false,message:'FCM token không hợp lệ.'});
     const tokenId=hashToken(token);
     const ownerRef=db.collection('push_token_owners').doc(tokenId);
-    await ownerRef.set({userId:req.user.id,updatedAt:admin.firestore.FieldValue.serverTimestamp()});
-    await db.collection('user_push_tokens').doc(req.user.id)
-      .collection('devices').doc(tokenId)
-      .set({token,updatedAt:admin.firestore.FieldValue.serverTimestamp()});
+    const batch = db.batch();
+    batch.set(ownerRef, {
+      userId: req.user.id,
+      updatedAt: FieldValue.serverTimestamp()
+    });
+    batch.set(
+      db.collection('user_push_tokens').doc(req.user.id)
+        .collection('devices').doc(tokenId),
+      {token, updatedAt: FieldValue.serverTimestamp()}
+    );
+    await batch.commit();
     res.json({success:true});
   } catch (error) {
-    console.error('Push registration:', error);
+    console.error('Push registration failed:', {
+      code: error?.code,
+      message: error?.message,
+      stack: error?.stack
+    });
     res.status(500).json({success:false,message:'Không lưu được thiết bị.'});
   }
 });
@@ -94,7 +106,7 @@ router.get('/internal/send-booking-reminders', async (req,res) => {
         // Atomic claim: cron chạy song song không phát trùng.
         try { await reminderRef.create({
           bookingId:bookingDoc.id, userId:b.userId, date:s.date, startTime:s.startTime,
-          status:'processing', createdAt:admin.firestore.FieldValue.serverTimestamp()
+          status:'processing', createdAt:FieldValue.serverTimestamp()
         }); } catch(e) { if(e.code===6 || e.code==='already-exists') {skipped++;continue;} throw e; }
         try {
           if(!tokenCache.has(b.userId)) {
@@ -130,7 +142,7 @@ router.get('/internal/send-booking-reminders', async (req,res) => {
               await devices[i].ref.delete().catch(()=>{});
             }
           }
-          await reminderRef.update({status:response.successCount?'sent':'failed',successCount:response.successCount, failureCount:response.failureCount, completedAt:admin.firestore.FieldValue.serverTimestamp()});
+          await reminderRef.update({status:response.successCount?'sent':'failed',successCount:response.successCount, failureCount:response.failureCount, completedAt:FieldValue.serverTimestamp()});
           sent+=response.successCount;
           errors+=response.failureCount;
         }catch(e){
