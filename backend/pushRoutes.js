@@ -72,6 +72,43 @@ function isConfirmed(b) {
     (b.bookingType === 'membership' || b.paymentStatus === 'paid');
 }
 
+// Hộp thư thông báo, chỉ cho phép người dùng đọc dữ liệu của chính mình.
+router.get('/notifications', requireAuth, async (req,res) => {
+  try {
+    const snap = await db.collection('user_notifications').doc(req.user.id)
+      .collection('items').orderBy('createdAt','desc').limit(100).get();
+    res.json({success:true,notifications:snap.docs.map(d=>({id:d.id,...d.data(),createdAt:d.data().createdAt?.toDate?.()?.toISOString()||null}))});
+  } catch(error) {
+    console.error('List notifications:', error);
+    res.status(500).json({success:false,message:'Không tải được thông báo.'});
+  }
+});
+router.post('/notifications/:id/read', requireAuth, async (req,res) => {
+  try {
+    const id=req.params.id;
+    if(!/^[a-f0-9]{64}$/.test(id))return res.sendStatus(400);
+    const ref=db.collection('user_notifications').doc(req.user.id).collection('items').doc(id);
+    const snap=await ref.get();
+    if(!snap.exists)return res.sendStatus(404);
+    await ref.update({read:true,readAt:FieldValue.serverTimestamp()});
+    res.json({success:true});
+  } catch(error) {
+    console.error('Read notification:',error);
+    res.status(500).json({success:false});
+  }
+});
+router.post('/notifications/read-all', requireAuth, async (req,res) => {
+  try {
+    const snap=await db.collection('user_notifications').doc(req.user.id)
+      .collection('items').where('read','==',false).limit(100).get();
+    if(snap.empty)return res.json({success:true,updated:0});
+    const batch=db.batch();
+    snap.docs.forEach(d=>batch.update(d.ref,{read:true,readAt:FieldValue.serverTimestamp()}));
+    await batch.commit();
+    res.json({success:true,updated:snap.size});
+  }catch(error){ console.error('Read all:',error);res.status(500).json({success:false}); }
+});
+
 // Được gọi bởi cron bên ngoài, mỗi 5 phút. Không dành cho người dùng thông thường.
 router.get('/internal/send-booking-reminders', async (req,res) => {
   const secret = process.env.CRON_SECRET;
@@ -135,6 +172,13 @@ router.get('/internal/send-booking-reminders', async (req,res) => {
             tokens:devices.map(d=>d.token),
             android:{priority:'high'},
           };
+          // Lưu thông báo trong app trước khi gửi FCM. Đánh dấu theo session, không tạo trùng.
+          const inboxRef=db.collection('user_notifications').doc(b.userId).collection('items').doc(reminderId);
+          await inboxRef.set({
+            title:message.notification.title,body:message.notification.body,
+            bookingId:bookingDoc.id,date:s.date,courtId:String(s.courtId),startTime:s.startTime,
+            type:'booking_reminder',read:false,createdAt:FieldValue.serverTimestamp()
+          });
           const response=await admin.messaging().sendEachForMulticast(message);
           for(let i=0;i<response.responses.length;i++){
             const result=response.responses[i];

@@ -13,6 +13,8 @@ import 'field_detail.dart';
 import 'search.dart';
 import 'map_screen.dart';
 import 'explore.dart';
+import 'notifications_screen.dart';
+
 import 'my_schedule.dart';
 import 'account_screen.dart';
 import '../favorite_service.dart';
@@ -330,15 +332,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return buffer.toString();
   }
 
-  void _showComingSoon(String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$feature sẽ được phát triển ở bước tiếp theo.'),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: oliveGreen,
-      ),
-    );
-  }
 
   void _onNavTap(int index) {
     if (index == 4) {
@@ -499,7 +492,7 @@ class _HomeScreenState extends State<HomeScreen> {
         const SizedBox(width: 6),
         IconButton(
           tooltip: 'Thông báo',
-          onPressed: () => _showComingSoon('Thông báo'),
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotificationsScreen())),
           style: IconButton.styleFrom(backgroundColor: const Color(0xFFF7F6FB), fixedSize: const Size(40, 40)),
           icon: const Icon(Icons.notifications_none_rounded, color: oliveGreen, size: 22),
         ),
