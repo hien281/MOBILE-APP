@@ -152,7 +152,7 @@ class _MapScreenState extends State<MapScreen> {
       case 'bóng đá': return Icons.sports_soccer_rounded;
       case 'cầu lông': return Icons.sports_tennis_rounded;
       case 'tennis': return Icons.sports_baseball_rounded;
-      case 'pickleball': return Icons.sports_tennis_rounded;
+      case 'pickleball': return Icons.sports_cricket_rounded;
       default: return Icons.sports_rounded;
     }
   }
@@ -168,7 +168,7 @@ class _MapScreenState extends State<MapScreen> {
         height: size,
         fit: BoxFit.contain,
         color: color,
-        errorBuilder: (_, __, ___) =>
+        errorBuilder: (_, _, _) =>
             Icon(_getSportIcon(sport), color: color, size: size),
       );
     }

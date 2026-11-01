@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../api_client.dart';
+import '../favorite_service.dart';
 import 'booking.dart';
 import 'home.dart';
 
 const Color colorPrimary = Color(0xFF1E147B);
-const Color colorYellow = Color.fromARGB(255, 255, 253, 110);
+const Color colorYellow = Color.fromARGB(255, 255, 238, 130);
 const Color colorMauve = Color(0xFFC86FC9);
 const Color colorLavender = Color(0xFFDFDCF9);
 const Color colorBackground = Color.fromARGB(255, 254, 255, 247);
@@ -30,6 +31,24 @@ class FieldDetailScreen extends StatefulWidget {
 
 class _FieldDetailScreenState extends State<FieldDetailScreen> {
   bool _isHoursExpanded = false;
+  bool _isFavorite = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _readFavorite();
+  }
+
+  Future<void> _readFavorite() async {
+    final result = await FavoriteService.isFavorite(widget.field.id);
+    if (mounted) setState(() => _isFavorite = result);
+  }
+
+  Future<void> _toggleDetailFavorite() async {
+    final result = await FavoriteService.toggleFavorite(widget.field.id);
+    if (mounted) setState(() => _isFavorite = result);
+  }
+
 
   /// Icon cho từng môn thể thao 
   IconData _sportIcon(String sport) {
@@ -41,10 +60,10 @@ class _FieldDetailScreenState extends State<FieldDetailScreen> {
       return Icons.sports_tennis_rounded;
     }
     if (lower.contains('tennis')) {
-      return Icons.sports_tennis_rounded;
+      return Icons.sports_baseball_rounded;
     }
-    if (lower.contains('bóng rổ') || lower.contains('basketball') || lower.contains('pickleball')) {
-      return Icons.sports_basketball_rounded;
+    if (lower.contains('pickleball') || lower.contains('pickleball') || lower.contains('pickleball')) {
+      return Icons.sports_cricket_rounded;
     }
     return Icons.sports_rounded;
   }
@@ -378,6 +397,26 @@ class _FieldDetailScreenState extends State<FieldDetailScreen> {
                                   size: 22,
                                 ),
                               ),
+                            ),
+                          ),
+                        ),
+                        // Favorite button on banner: same persistent favorites as Home.
+                        Positioned(
+                          top: MediaQuery.of(context).padding.top + 8,
+                          right: 12,
+                          child: Material(
+                            color: Colors.white.withValues(alpha: 0.95),
+                            shape: const CircleBorder(),
+                            elevation: 3,
+                            shadowColor: Colors.black38,
+                            child: IconButton(
+                              tooltip: _isFavorite ? 'Bo yeu thich' : 'Them vao yeu thich',
+                              icon: Icon(
+                                _isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                                color: _isFavorite ? Colors.redAccent : colorPrimary,
+                                size: 22,
+                              ),
+                              onPressed: _toggleDetailFavorite,
                             ),
                           ),
                         ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../favorite_service.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import '../api_client.dart';
@@ -242,7 +243,11 @@ class _SearchScreenState extends State<SearchScreen> {
           accessToken: widget.accessToken,
         ),
       ),
-    );
+    ).then((_) async {
+      final ids = await FavoriteService.getFavorites();
+      if (!mounted) return;
+      setState(() { _favoriteIds..clear()..addAll(ids); });
+    });
   }
 
   String _formatPrice(int price) {
@@ -335,7 +340,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 const Text(
                   'Tìm sân',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: FontWeight.w800,
                     color: textPrimary,
                   ),
@@ -770,7 +775,10 @@ class _SearchScreenState extends State<SearchScreen> {
           : 'Đang đóng cửa | Mở cửa lúc ${field.openTime}';
     }
 
-    return Container(
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _openFieldDetail(field),
+      child: Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1036,6 +1044,7 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

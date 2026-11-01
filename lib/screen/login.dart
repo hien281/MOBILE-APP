@@ -266,7 +266,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     'assets/images/login_bg.jpg',
                     fit: BoxFit.cover,
                     alignment: Alignment.topCenter,
-                    errorBuilder: (_, __, ___) {
+                    errorBuilder: (_, _, _) {
                       return const ColoredBox(
                         color: Color(0xFFD9D1F5),
                         child: Center(

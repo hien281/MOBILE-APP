@@ -617,7 +617,7 @@ class _HomeScreenState extends State<HomeScreen> {
       'Bóng đá': Icons.sports_soccer_rounded,
       'Cầu lông': Icons.sports_tennis_rounded,
       'Tennis': Icons.sports_baseball_rounded,
-      'Pickleball': Icons.sports_tennis_rounded,
+      'Pickleball': Icons.sports_cricket_rounded,
     };
     if (isWide) {
       return Wrap(spacing: 15, runSpacing: 12,
@@ -662,7 +662,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ? 'assets/images/icon_tennis.png'
                             : 'assets/images/icon_pickleball.png',
                         color: selected ? Colors.white : const Color(0xFF35167F),
-                        errorBuilder: (_, __, ___) => Icon(icon, size: 23,
+                        errorBuilder: (_, _, _) => Icon(icon, size: 23,
                           color: selected ? Colors.white : oliveGreen),
                       ),
                     )
@@ -693,7 +693,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 borderRadius: BorderRadius.circular(17),
                 child: Stack(fit: StackFit.expand, children: [
                   Image.asset(banner.$4, fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
+                    errorBuilder: (_, _, _) => Container(
                       decoration: const BoxDecoration(
                         gradient: LinearGradient(colors: [Color(0xFF35167F), Color(0xFF9A7CD5)])),
                       child: const Align(alignment: Alignment.centerRight,
@@ -770,7 +770,9 @@ class _HomeScreenState extends State<HomeScreen> {
         TextButton(onPressed: _loadFields, child: const Text('Thử lại')),
       ]));
     }
-    final fields = _filteredFields;
+    final fields = _selectedSport == String.fromCharCodes([84,7845,116,32,99,7843])
+        ? _filteredFields.where((field) => field.isPopular).toList()
+        : _filteredFields;
 
     if (fields.isEmpty) {
       return SliverToBoxAdapter(
@@ -850,12 +852,15 @@ class _HomeScreenState extends State<HomeScreen> {
           accessToken: widget.accessToken,
         ),
       ),
-    );
+    ).then((_) { if (mounted) _loadFavorites(); });
   }
   Widget _buildFieldCard(SportsField field) {
     final isFavorite = _favoriteIds.contains(field.id);
 
-    return Container(
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _openFieldDetail(field),
+      child: Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -886,7 +891,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     field.imageUrl,
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) {
-                      return Container(
+                      return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _openFieldDetail(field),
+      child: Container(
                         color: const Color(0xFFE8EDDF),
                         child: const Center(
                           child: Icon(
@@ -895,19 +903,22 @@ class _HomeScreenState extends State<HomeScreen> {
                             color: oliveGreen,
                           ),
                         ),
-                      );
+                      ));
                     },
                     loadingBuilder: (context, child, progress) {
                       if (progress == null) return child;
 
-                      return Container(
+                      return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _openFieldDetail(field),
+      child: Container(
                         color: const Color(0xFFF0F2EB),
                         alignment: Alignment.center,
                         child: const CircularProgressIndicator(
                           color: oliveGreen,
                           strokeWidth: 2,
                         ),
-                      );
+                      ));
                     },
                   ),
                 ),
@@ -1156,6 +1167,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
