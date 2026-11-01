@@ -18,7 +18,6 @@ class ExploreScreen extends StatefulWidget {
 }
 
 class ExploreScreenState extends State<ExploreScreen> {
-  // Chuẩn hóa bộ màu chuẩn của SPORTY đồng bộ với Trang chủ & Bản đồ
   static const Color primary = Color(0xFF1E147B);
   static const Color background = Color(0xFFF6F7EB);
   static const Color textSecondary = Color(0xFF77748E);
@@ -206,7 +205,7 @@ class ExploreScreenState extends State<ExploreScreen> {
     );
   }
 
-  // Giao diện tab "Tất cả": Gom nhóm bài viết theo môn & chỉ hiện đúng 3 Banner cố định
+  // Giao diện tab "Tất cả"
   Widget _buildAllGroupedBySportList() {
     final List<String> sportsOrder = ['Pickleball', 'Cầu lông', 'Bóng đá'];
     return ListView.builder(
@@ -758,9 +757,17 @@ class ExploreScreenState extends State<ExploreScreen> {
             children: [
               Icon(icon, size: 13, color: color),
               const SizedBox(width: 3),
-              Text(
-                label,
-                style: TextStyle(fontSize: 10, color: whiteLabel ? Colors.white : textSecondary, fontWeight: whiteLabel ? FontWeight.w700 : FontWeight.normal),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    color: whiteLabel ? Colors.white : textSecondary,
+                    fontWeight: whiteLabel ? FontWeight.w700 : FontWeight.normal,
+                  ),
+                ),
               ),
             ],
           ),

@@ -45,6 +45,49 @@ function allowedByPackage(packageData, date, times, field) {
   });
 }
 
+// POST /api/my-memberships/:id/cancel
+router.post('/my-memberships/:id/cancel', requireAuth, async (req, res) => {
+  try {
+    const cardRef = db.collection('user_memberships').doc(req.params.id);
+    const result = await db.runTransaction(async tx => {
+      const cardDoc = await tx.get(cardRef);
+      if (!cardDoc.exists) return { code: 404, message: 'Không tìm thấy thẻ hội viên.' };
+      const card = cardDoc.data();
+      if (card.userId !== req.user.id) return { code: 403, message: 'Không có quyền thao tác trên thẻ này.' };
+      if (card.status !== 'active') return { code: 400, message: 'Thẻ không ở trạng thái đang hoạt động.' };
+
+      const total = Number(card.totalSlots) || 0;
+      const remaining = Number(card.remainingSlots) || 0;
+      const refundPercent = total > 0 ? Math.max(0, Math.round((remaining / total) * 100)) : 0;
+      const cancelledAt = new Date().toISOString();
+
+      tx.update(cardRef, {
+        status: 'cancelled',
+        cancelledAt,
+        cancellationReason: req.body?.reason || 'user_requested',
+        refundStatus: 'succeeded',
+        refundPercent,
+      });
+
+      return {
+        code: 200,
+        success: true,
+        message: 'Đã huỷ gói thẻ hội viên thành công.',
+        remainingSlots: remaining,
+        refundPercent,
+      };
+    });
+
+    if (result.code !== 200) {
+      return res.status(result.code).json({ success: false, message: result.message });
+    }
+    return res.json(result);
+  } catch (e) {
+    console.error('Cancel membership error:', e);
+    return res.status(500).json({ success: false, message: 'Không thể huỷ thẻ hội viên lúc này.' });
+  }
+});
+
 router.get('/my-memberships', requireAuth, async (req,res) => {
   try {
     const snap = await db.collection('user_memberships').where('userId','==',req.user.id).get();
