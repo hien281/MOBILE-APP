@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -47,6 +48,12 @@ class _MembershipPaymentScreenState
   bool _checking = false;
   bool _checkoutStarted = false;
   String? _error;
+  String? _membershipImageUrl;
+  String? _membershipVenue;
+  String? _membershipDuration;
+  String? _membershipSlots;
+  String? _membershipSport;
+  String? _membershipApplyTime;
 
   String get _api =>
       widget.baseUrl.replaceFirst(RegExp(r'/$'), '');
@@ -73,6 +80,32 @@ class _MembershipPaymentScreenState
       (_) => _refreshStatus(),
     );
     _refreshStatus();
+    _loadMembershipDetails();
+  }
+
+  Future<void> _loadMembershipDetails() async {
+    try {
+      final result = await FirebaseFirestore.instance.collection('memberships').get();
+      final target = widget.membershipName.trim().toLowerCase();
+      for (final doc in result.docs) {
+        final m = doc.data();
+        final name = (m['cardName'] ?? m['name'] ?? m['title'] ?? '').toString().trim().toLowerCase();
+        if (name != target) continue;
+        final image = (m['imageUrl'] ?? m['coverUrl'] ?? m['bannerUrl'] ?? m['logoUrl'])?.toString();
+        if (!mounted) return;
+        setState(() {
+          _membershipImageUrl = image != null && Uri.tryParse(image)?.scheme == 'https' ? image : null;
+          _membershipVenue = (m['venue'] ?? '').toString();
+          _membershipDuration = (m['duration'] ?? '').toString();
+          _membershipSlots = (m['freeSlots'] ?? '').toString();
+          _membershipSport = (m['sport'] ?? '').toString();
+          _membershipApplyTime = (m['applyTime'] ?? m['applicableHours'] ?? m['timeRange'] ?? '').toString();
+        });
+        break;
+      }
+    } catch (_) {
+      // Không để lỗi tải ảnh/thông tin làm gián đoạn thanh toán.
+    }
   }
 
   @override
@@ -272,143 +305,284 @@ class _MembershipPaymentScreenState
     (_) => '.',
   );
 
+  static const Color _primary = Color.fromARGB(255, 54, 26, 148);
+  static const Color _background = Color.fromARGB(255, 255, 254, 247);
+
+  Widget _card(Widget child) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: 0.74),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: _primary.withValues(alpha: 0.35), width: 0.7),
+    ),
+    child: child,
+  );
+
+  Widget _detail(String label, String value, {bool highlight = false}) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFF77788A))),
+            ),
+            const SizedBox(width: 12),
+            Flexible(
+              child: Text(
+                value,
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: highlight ? _primary : const Color(0xFF202039),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+
+  Widget _membershipPreview() => Container(
+    width: 54,
+    height: 54,
+    clipBehavior: Clip.antiAlias,
+    decoration: BoxDecoration(
+      color: const Color(0xFFF0EEE5),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: _membershipImageUrl == null
+        ? const Center(child: Icon(Icons.card_membership_rounded, size: 26, color: _primary))
+        : Image.network(
+            _membershipImageUrl!,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => const Center(
+              child: Icon(Icons.card_membership_rounded, size: 26, color: _primary),
+            ),
+          ),
+  );
+
   @override
   Widget build(BuildContext context) {
-    final minutes =
-        _remaining.inMinutes.toString().padLeft(2, '0');
-    final seconds =
-        (_remaining.inSeconds % 60).toString().padLeft(2, '0');
+    final seconds = _remaining.inSeconds;
+    final countdown =
+        '${(seconds ~/ 60).toString().padLeft(2, '0')}:'
+        '${(seconds % 60).toString().padLeft(2, '0')}';
+    final closed = _status == 'cancelled' || _status == 'expired';
+    final finished = _paid || _refund || _expired || closed;
+    final canPay = !finished && !_loading && !_checking && !_checkoutStarted;
+    final subtitle = _paid
+        ? 'Thẻ hội viên đã được ghi nhận. Cảm ơn bạn!'
+        : _refund
+            ? 'Vui lòng liên hệ hỗ trợ để kiểm tra hoàn tiền, không thanh toán lại.'
+            : closed || _expired
+                ? 'Đã hết thời gian thanh toán. Vui lòng kiểm tra trạng thái đơn.'
+                : _checkoutStarted
+                    ? 'SPORTY sẽ tự động kiểm tra trạng thái thanh toán.'
+                    : 'Vui lòng thanh toán trước khi hết thời gian giữ đơn.';
 
     return Scaffold(
+      backgroundColor: _background,
       appBar: AppBar(
-        title: const Text('Thanh toán hội viên'),
+        backgroundColor: const Color(0xFFF9F8F2),
+        toolbarHeight: 48,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        centerTitle: true,
+        title: Text(
+          _paid ? 'Xác nhận hội viên' : 'Thanh toán hội viên',
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: _primary),
+        ),
+        leading: IconButton(
+          onPressed: () => Navigator.of(context).maybePop(),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: _primary),
+        ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          const Icon(
-            Icons.card_membership,
-            size: 64,
-            color: Color(0xFF1E147B),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            widget.membershipName,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            '${_money(widget.totalPrice)} đ',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1E147B),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'Thời gian thanh toán còn lại: $minutes:$seconds',
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 24),
-
-          if (_paid)
-            const Card(
-              child: Padding(
-                padding: EdgeInsets.all(20),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.check_circle,
-                      color: Colors.green,
-                      size: 48,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(14),
+                children: [
+                  _card(
+                    _paid
+                        ? Row(
+                            children: [
+                              const CircleAvatar(
+                                radius: 13,
+                                backgroundColor: Color(0xFF159E65),
+                                child: Icon(Icons.check_rounded, color: Colors.white, size: 17),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Đăng ký hội viên thành công!',
+                                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _primary)),
+                                  const SizedBox(height: 3),
+                                  Text(subtitle, style: const TextStyle(fontSize: 12, color: Color(0xFF6B6B80))),
+                                ],
+                              )),
+                            ],
+                          )
+                        : Column(
+                            children: [
+                              Text(subtitle, textAlign: TextAlign.center,
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _primary)),
+                              if (!finished) ...[
+                                const SizedBox(height: 7),
+                                const Text('Thời gian thanh toán còn lại',
+                                    style: TextStyle(fontSize: 12, color: Color(0xFF6B6B80))),
+                                const SizedBox(height: 2),
+                                Text(countdown,
+                                    style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w700, color: _primary)),
+                              ],
+                            ],
+                          ),
+                  ),
+                  const SizedBox(height: 11),
+                  _card(Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        _membershipPreview(),
+                        const SizedBox(width: 12),
+                        Expanded(child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(widget.membershipName,
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _primary)),
+                            const SizedBox(height: 6),
+                            Text('${_money(widget.totalPrice)}đ',
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _primary)),
+                          ],
+                        )),
+                      ]),
+                      const Divider(height: 25),
+                      const Text('Thông tin thẻ hội viên',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 5),
+                      _detail('Mã đơn', widget.orderId),
+                      if (_membershipVenue?.isNotEmpty == true)
+                        _detail('Địa điểm', _membershipVenue!),
+                      if (_membershipDuration?.isNotEmpty == true)
+                        _detail('Thời hạn thẻ', _membershipDuration!),
+                      if (_membershipSlots?.isNotEmpty == true)
+                        _detail('Lượt miễn phí', _membershipSlots!),
+                      if (_membershipApplyTime?.isNotEmpty == true)
+                        _detail('Khung giờ áp dụng', _membershipApplyTime!),
+                      if (_membershipSport?.isNotEmpty == true)
+                        _detail('Bộ môn', _membershipSport!),
+                      const Divider(height: 25),
+                      _detail('Tổng thanh toán', '${_money(widget.totalPrice)}đ', highlight: true),
+                      _detail('Trạng thái', _paid ? 'Đã thanh toán' : _refund
+                          ? 'Cần kiểm tra hoàn tiền' : closed || _expired
+                          ? 'Đã hết hạn' : 'Chờ thanh toán'),
+                    ],
+                  )),
+                  const SizedBox(height: 14),
+                  if (!finished)
+                    _card(Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Phương thức thanh toán',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 12),
+                        RadioListTile<String>(
+                          value: 'vnpay',
+                          groupValue: _method,
+                          onChanged: _checkoutStarted ? null : (value) => setState(() => _method = value!),
+                          contentPadding: EdgeInsets.zero,
+                          activeColor: _primary,
+                          title: const Text('VNPay', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                          subtitle: const Text('Thanh toán trực tuyến', style: TextStyle(fontSize: 12)),
+                          secondary: const Icon(Icons.account_balance_rounded, color: _primary),
+                        ),
+                        const Divider(),
+                        RadioListTile<String>(
+                          value: 'sepay',
+                          groupValue: _method,
+                          onChanged: _checkoutStarted ? null : (value) => setState(() => _method = value!),
+                          contentPadding: EdgeInsets.zero,
+                          activeColor: _primary,
+                          title: const Text('SePay QR', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                          subtitle: const Text('Quét mã chuyển khoản ngân hàng', style: TextStyle(fontSize: 12)),
+                          secondary: const Icon(Icons.qr_code, color: _primary),
+                        ),
+                      ],
+                    )),
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
                     ),
-                    SizedBox(height: 12),
-                    Text(
-                      'Thanh toán thành công!',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
+                  if (_checkoutStarted && !finished)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Column(children: [
+                        const Text('Đã mở cổng thanh toán. Vui lòng không tạo giao dịch thứ hai.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 12, color: Color(0xFF77788A))),
+                        TextButton.icon(
+                          onPressed: _checking ? null : _refreshStatus,
+                          icon: const Icon(Icons.refresh_rounded, size: 16),
+                          label: const Text('Kiểm tra trạng thái'),
+                        ),
+                      ]),
+                    ),
+                  if (finished && !_paid)
+                    Align(
+                      child: TextButton.icon(
+                        onPressed: _checking ? null : _refreshStatus,
+                        icon: const Icon(Icons.refresh_rounded, size: 16),
+                        label: const Text('Kiểm tra trạng thái'),
                       ),
                     ),
-                    Text('Thẻ hội viên đã được ghi nhận.'),
-                  ],
-                ),
+                ],
               ),
-            )
-          else if (_refund)
-            const Text(
-              'Giao dịch cần được kiểm tra hoàn tiền. '
-              'Vui lòng liên hệ hỗ trợ, không thanh toán lại.',
-              textAlign: TextAlign.center,
-            )
-          else if (_expired)
-            const Text(
-              'Đã hết thời gian thanh toán. '
-              'Nếu bạn vừa chuyển tiền, hãy kiểm tra trạng thái đơn.',
-              textAlign: TextAlign.center,
-            )
-          else ...[
-            RadioListTile<String>(
-              title: const Text('SePay'),
-              value: 'sepay',
-              groupValue: _method,
-              onChanged: _checkoutStarted
-                  ? null
-                  : (value) =>
-                      setState(() => _method = value!),
             ),
-            RadioListTile<String>(
-              title: const Text('VNPay'),
-              value: 'vnpay',
-              groupValue: _method,
-              onChanged: _checkoutStarted
-                  ? null
-                  : (value) =>
-                      setState(() => _method = value!),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: _loading ||
-                      _checking ||
-                      _checkoutStarted
-                  ? null
-                  : _pay,
-              child: _loading
-                  ? const CircularProgressIndicator()
-                  : const Text('Thanh toán ngay'),
-            ),
-            if (_checkoutStarted)
-              const Padding(
-                padding: EdgeInsets.only(top: 12),
-                child: Text(
-                  'Đã mở cổng thanh toán. '
-                  'Vui lòng không tạo giao dịch thứ hai.',
-                  textAlign: TextAlign.center,
-                ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
               ),
+              child: SizedBox(
+                width: double.infinity,
+                height: 45,
+                child: _paid
+                    ? FilledButton(
+                        onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
+                        style: FilledButton.styleFrom(backgroundColor: _primary),
+                        child: const Text('Về trang chủ'),
+                      )
+                    : finished
+                        ? FilledButton(
+                            onPressed: () => Navigator.of(context).maybePop(),
+                            style: FilledButton.styleFrom(backgroundColor: _primary),
+                            child: const Text('Quay lại'),
+                          )
+                        : _checkoutStarted
+                            ? const Center(child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  SizedBox(width: 17, height: 17,
+                                      child: CircularProgressIndicator(strokeWidth: 2)),
+                                  SizedBox(width: 10),
+                                  Text('Đang tự động xác minh thanh toán'),
+                                ],
+                              ))
+                            : FilledButton(
+                                onPressed: canPay ? _pay : null,
+                                style: FilledButton.styleFrom(backgroundColor: _primary),
+                                child: Text(_loading ? 'Đang mở thanh toán...' : 'Thanh toán'),
+                              ),
+              ),
+            ),
           ],
-
-          const SizedBox(height: 16),
-          OutlinedButton(
-            onPressed: _checking ? null : _refreshStatus,
-            child: const Text('Kiểm tra trạng thái'),
-          ),
-
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Text(
-                _error!,
-                style: const TextStyle(color: Colors.red),
-              ),
-            ),
-        ],
+        ),
       ),
     );
   }

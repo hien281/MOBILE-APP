@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
+import 'package:geolocator/geolocator.dart';
 
 import 'dart:convert';
 
 import '../api_client.dart';
+import '../location_service.dart';
 import 'membership_payment_screen.dart';
 
 class ExploreScreen extends StatefulWidget {
@@ -32,6 +34,9 @@ class ExploreScreenState extends State<ExploreScreen> {
   String _selectedCategory = 'Tất cả';
   bool _loading = false;
   List<Map<String, dynamic>> _items = [];
+  Position? _position;
+  List<Map<String, dynamic>> _venueFields = [];
+  bool _loadingDistances = false;
 
   final List<String> _categories = ['Tất cả', 'Sự kiện', 'Gói hội viên'];
 
@@ -39,6 +44,7 @@ class ExploreScreenState extends State<ExploreScreen> {
   void initState() {
     super.initState();
     _fetchExploreData();
+    _loadDistances();
   }
 
   Future<void> _fetchExploreData() async {
@@ -82,6 +88,106 @@ class ExploreScreenState extends State<ExploreScreen> {
     }
   }
 
+  // Sử dụng cùng nguồn GPS và API /fields với Home/Search.
+  // Không geocode từ địa chỉ hoặc dùng khoảng cách mẫu cố định.
+  Future<void> _loadDistances() async {
+    if (_loadingDistances) return;
+    _loadingDistances = true;
+    try {
+      // Mỗi nguồn xử lý lỗi riêng, để thiếu GPS không chặn việc tải sân.
+      final positionFuture = () async {
+        try {
+          return await LocationService.getCurrentLocation();
+        } catch (e) {
+          debugPrint('Explore GPS unavailable: $e');
+          return null;
+        }
+      }();
+      final fieldsFuture = () async {
+        try {
+          return await http.get(
+            Uri.parse('${ApiClient.baseUrl}/fields'),
+            headers: {'Cache-Control': 'no-cache'},
+          ).timeout(const Duration(seconds: 15));
+        } catch (e) {
+          debugPrint('Explore fields unavailable: $e');
+          return http.Response('{}', 503);
+        }
+      }();
+      final position = await positionFuture;
+      final response = await fieldsFuture;
+      List<Map<String, dynamic>> fields = [];
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+        if (decoded is Map && decoded['fields'] is List) {
+          fields = (decoded['fields'] as List)
+              .whereType<Map>()
+              .map((f) => Map<String, dynamic>.from(f))
+              .toList();
+        }
+      }
+      if (mounted) setState(() {
+        _position = position;
+        _venueFields = fields;
+      });
+    } catch (e) {
+      debugPrint('Explore distance lookup unavailable: $e');
+    } finally {
+      _loadingDistances = false;
+    }
+  }
+
+  String _normalise(String value) => value
+      .toLowerCase()
+      .trim()
+      .replaceAll(RegExp(r'\s+'), ' ');
+
+  double? _number(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value.trim());
+    return null;
+  }
+
+  String? _distanceFor(Map<String, dynamic> item) {
+    final position = _position;
+    if (position == null) return null;
+
+    // Ưu tiên tọa độ thuộc chính bản ghi hội viên, nếu có.
+    double? lat = _number(item['latitude']);
+    double? lon = _number(item['longitude']);
+
+    if (lat == null || lon == null) {
+      // Bản ghi memberships liên kết với sân qua fieldId, venue hoặc address.
+      // Chỉ dùng tên/địa chỉ trùng chính xác để tránh tính nhầm sân.
+      final fieldId = (item['fieldId'] ?? '').toString().trim();
+      final venue = _normalise((item['venue'] ?? '').toString());
+      final address = _normalise((item['address'] ?? '').toString());
+      for (final field in _venueFields) {
+        final idMatches = fieldId.isNotEmpty &&
+            fieldId == (field['id'] ?? '').toString();
+        final venueMatches = venue.isNotEmpty &&
+            venue == _normalise((field['name'] ?? '').toString());
+        final addressMatches = address.isNotEmpty &&
+            address == _normalise((field['address'] ?? '').toString());
+        if (idMatches || venueMatches || addressMatches) {
+          lat = _number(field['latitude']);
+          lon = _number(field['longitude']);
+          break;
+        }
+      }
+    }
+
+    if (lat == null || lon == null || !lat.isFinite || !lon.isFinite ||
+        lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+    final km = Geolocator.distanceBetween(
+      position.latitude, position.longitude, lat, lon,
+    ) / 1000;
+    if (!km.isFinite) return null;
+    return km < 1
+        ? '${(km * 1000).round()} m'
+        : '${km.toStringAsFixed(1).replaceAll('.', ',')} km';
+  }
+
   void _useMockData() {
     if (!mounted) return;
     setState(() {
@@ -91,7 +197,6 @@ class ExploreScreenState extends State<ExploreScreen> {
           'id': 'mem_01',
           'category': 'Gói hội viên',
           'venue': 'Swin Pickleball',
-          'distance': '1.5km',
           'address': '218A Thành Thái, Quận 10, Thành phố Hồ Chí Minh',
           'postTime': '08:00 28/10/2026',
           'tag': '#uudaigoihoivien',
@@ -193,7 +298,9 @@ class ExploreScreenState extends State<ExploreScreen> {
                       child: CircularProgressIndicator(color: primary),
                     )
                   : RefreshIndicator(
-                      onRefresh: _fetchExploreData,
+                      onRefresh: () async {
+                        await Future.wait([_fetchExploreData(), _loadDistances()]);
+                      },
                       child: _selectedCategory == 'Tất cả'
                           ? _buildAllGroupedBySportList()
                           : _buildSingleCategoryList(),
@@ -586,14 +693,15 @@ class ExploreScreenState extends State<ExploreScreen> {
                     ),
                     Row(
                       children: [
-                        Text(
-                          '(${item['distance'] ?? ''}) ',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: primary,
-                            fontWeight: FontWeight.bold,
+                        if (_distanceFor(item) case final distance?)
+                          Text(
+                            '($distance) ',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: primary,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
                         Expanded(
                           child: Text(
                             (item['address'] ?? '').toString(),
@@ -683,19 +791,19 @@ class ExploreScreenState extends State<ExploreScreen> {
                       Icons.access_time,
                       'Thời hạn',
                       (item['duration'] ?? '').toString(),
-                      primary,
+                      primary, flex: 8,
                     ),
                     _buildMiniFeature(
                       Icons.check_circle_outline,
                       'Lượt miễn phí',
                       (item['freeSlots'] ?? '').toString(),
-                      primary,
+                      primary, flex: 9,
                     ),
                     _buildMiniFeature(
                       Icons.sports_golf,
                       'Loại sân',
                       sport,
-                      primary,
+                      primary, flex: 10,
                     ),
                   ],
                 ),
@@ -747,9 +855,10 @@ class ExploreScreenState extends State<ExploreScreen> {
     IconData icon,
     String label,
     String val,
-    Color color, {bool whiteLabel = false}
+    Color color, {bool whiteLabel = false, int flex = 1}
   ) {
     return Expanded(
+      flex: flex,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

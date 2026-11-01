@@ -40,6 +40,73 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
   bool _useMembership = false;
   String? _selectedCardId;
   List<Map<String, dynamic>> _membershipCards = [];
+  String _membershipHours(Map<String, dynamic> card) {
+    for (final key in ['applyTime', 'applicableTime', 'timeRange', 'applicableHours']) {
+      final value = card[key]?.toString().trim();
+      if (value != null && value.isNotEmpty) return value;
+    }
+    return 'Theo điều kiện của thẻ';
+  }
+
+  Widget _membershipSelector() {
+    if (_membershipCards.isEmpty) return const SizedBox.shrink();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const SizedBox(height: 6),
+      for (final card in _membershipCards)
+        Padding(padding: const EdgeInsets.only(bottom: 7), child: InkWell(
+          onTap: () => setState(() {
+            final id = card['id']?.toString();
+            if (_useMembership && _selectedCardId == id) {
+              _useMembership = false;
+              _selectedCardId = null;
+            } else {
+              _useMembership = true;
+              _selectedCardId = id;
+            }
+          }),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: const Color(0xFFF7F3FF),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFD9CDFB))),
+            child: Row(children: [
+              Container(width: 35, height: 35,
+                decoration: BoxDecoration(color: const Color(0xFFE7DEFF), borderRadius: BorderRadius.circular(9)),
+                child: const Icon(Icons.card_membership_rounded, color: primary, size: 19)),
+              const SizedBox(width: 8),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text((card['membershipName'] ?? 'Thẻ hội viên').toString(),
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: primary)),
+                const SizedBox(height: 3),
+                Text('Sử dụng ${_dates.length * _courts.length} lượt',
+                  style: const TextStyle(fontSize: 11, color: Color(0xFF77748E))),
+                Text(_membershipHours(card), maxLines: 2,
+                  style: const TextStyle(fontSize: 11, color: Color(0xFF77748E))),
+              ])),
+              const SizedBox(width: 5),
+              Column(mainAxisSize: MainAxisSize.min, children: [
+                Container(padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                  decoration: BoxDecoration(color: const Color(0xFFE9E1FF), borderRadius: BorderRadius.circular(20)),
+                  child: Text('Còn ${card['remainingSlots']} lượt', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: primary))),
+                const SizedBox(height: 7),
+                Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+                  decoration: BoxDecoration(color: _useMembership && _selectedCardId == card['id']?.toString() ? primary : Colors.white,
+                    borderRadius: BorderRadius.circular(9), border: Border.all(color: primary)),
+                  child: Text(_useMembership && _selectedCardId == card['id']?.toString() ? 'Đã chọn' : 'Dùng thẻ',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                      color: _useMembership && _selectedCardId == card['id']?.toString() ? Colors.white : primary))),
+              ]),
+            ]),
+          ),
+        )),
+      if (_useMembership) Padding(
+        padding: const EdgeInsets.only(top: 7, bottom: 3),
+        child: Text('Cần ${_dates.length * _courts.length} lượt. Mỗi buổi trừ 1 lượt; nếu một buổi không hợp lệ, toàn bộ lịch sẽ không được đặt.',
+          style: const TextStyle(fontSize: 12, height: 1.4))),
+    ]);
+  }
   bool _submitting = false, _checking = false;
   final Map<String, Set<String>> _busy = {};
   String? _checkError;
@@ -95,7 +162,10 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
       if (!mounted || data is! Map || data['memberships'] is! List) return;
       setState(() {
         _membershipCards = (data['memberships'] as List).whereType<Map>().map((m) => Map<String, dynamic>.from(m)).where((m) => m['fieldId'] == widget.fieldId && m['status'] == 'active' && (m['remainingSlots'] is num && (m['remainingSlots'] as num) > 0)).toList();
-        if (!_membershipCards.any((m) => m['id'] == _selectedCardId)) _selectedCardId = null;
+        if (!_membershipCards.any((m) => m['id'] == _selectedCardId)) {
+          _selectedCardId = null;
+          _useMembership = false;
+        }
       });
     } catch (_) { /* Paid booking remains available if cards cannot load. */ }
   }
@@ -644,7 +714,7 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    subtitle: Text('${_end - _start} giờ / buổi'),
+                    subtitle: Text('${_end - _start} giờ / buổi', style: const TextStyle(fontSize: 12)),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: _scheduleLoaded && !_checking && _checkError == null
                         ? _chooseTime
@@ -675,21 +745,29 @@ class _FixedBookingScreenState extends State<FixedBookingScreen> {
                     ],
                   ),
                 ),
-                _section('4. Hình thức thanh toán', Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    RadioListTile<bool>(title: const Text('Thanh toán thông thường'), value: false, groupValue: _useMembership, onChanged: (v) => setState(() => _useMembership = false)),
-                    RadioListTile<bool>(title: const Text('Sử dụng thẻ hội viên'), value: true, groupValue: _useMembership, onChanged: _membershipCards.isEmpty ? null : (v) => setState(() => _useMembership = true)),
-                    if (_membershipCards.isEmpty) const Text('Không có thẻ hội viên còn lượt cho sân này.', style: TextStyle(fontSize: 12)),
-                    if (_useMembership) DropdownButtonFormField<String>(
-                      value: _selectedCardId,
-                      decoration: const InputDecoration(labelText: 'Chọn thẻ hội viên'),
-                      items: _membershipCards.map((m) => DropdownMenuItem<String>(value: m['id'].toString(), child: Text("${m['membershipName'] ?? 'Thẻ hội viên'} · ${m['remainingSlots']} lượt"))).toList(),
-                      onChanged: (v) => setState(() => _selectedCardId = v),
-                    ),
-                    if (_useMembership) Text('Cần ${_dates.length * _courts.length} lượt. Mỗi buổi trừ 1 lượt; nếu một buổi không hợp lệ, toàn bộ lịch sẽ không được đặt.', style: const TextStyle(fontSize: 12)),
-                  ],
-                )),
+                 _section('4. Hình thức thanh toán', Column(
+                   crossAxisAlignment: CrossAxisAlignment.start,
+                   children: [
+                     RadioListTile<bool>(
+                       dense: true,
+                       contentPadding: EdgeInsets.zero,
+                       title: const Text('Thanh toán thông thường', style: TextStyle(fontSize: 13)),
+                       value: false, groupValue: _useMembership,
+                       onChanged: (v) => setState(() => _useMembership = false)),
+                     if (_membershipCards.isNotEmpty) ...[
+                       RadioListTile<bool>(
+                         dense: true,
+                         contentPadding: EdgeInsets.zero,
+                         title: const Text('Sử dụng thẻ hội viên', style: TextStyle(fontSize: 13)),
+                         value: true, groupValue: _useMembership,
+                         onChanged: (v) => setState(() {
+                           _useMembership = true;
+                           _selectedCardId ??= _membershipCards.first['id']?.toString();
+                         })),
+                       if (_useMembership) _membershipSelector(),
+                     ],
+                   ],
+                 )),
                 if (_checking) const LinearProgressIndicator(),
                 if (_checkError != null)
                   Text(

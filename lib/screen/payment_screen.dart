@@ -524,7 +524,7 @@ Future<void> _paySePay() async {
                                         Text(
                                           stateSubtitle,
                                           style: const TextStyle(
-                                            fontSize: 11,
+                                            fontSize: 12,
                                             color: Color(0xFF6B6B80),
                                           ),
                                         ),
@@ -549,7 +549,7 @@ Future<void> _paySePay() async {
                                     const Text(
                                       'Thời gian giữ sân còn lại',
                                       style: TextStyle(
-                                        fontSize: 11,
+                                        fontSize: 12,
                                         color: Color(0xFF6B6B80),
                                       ),
                                     ),
@@ -685,7 +685,7 @@ Future<void> _paySePay() async {
                                 ),
                                 subtitle: const Text(
                                   'Thanh toán trực tuyến',
-                                  style: TextStyle(fontSize: 11),
+                                  style: TextStyle(fontSize: 12),
                                 ),
                                 secondary: const Icon(
                                   Icons.account_balance_rounded,
@@ -714,7 +714,7 @@ Future<void> _paySePay() async {
                                 ),
                                 subtitle: const Text(
                                   'Quét mã chuyển khoản ngân hàng',
-                                  style: TextStyle(fontSize: 11),
+                                  style: TextStyle(fontSize: 12),
                                 ),
                                 secondary: const Icon(
                                   Icons.qr_code,

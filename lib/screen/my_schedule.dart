@@ -199,15 +199,76 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
     if(mounted) refresh(silent:true);
   }
 
-  Future<void> _cancel(Map<String,dynamic> b) async {
+  // Popup đồng nhất với trang Cá nhân: nhỏ gọn, một nút xác nhận.
+  Future<bool?> _showScheduleConfirm({
+    required String title,
+    required String content,
+    required String confirmText,
+    Color confirmColor = _purple,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.white,
+        elevation: 6,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 36),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Stack(alignment: Alignment.center, children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 30),
+                child: Text(title, textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _purple)),
+              ),
+              Align(alignment: Alignment.centerRight,
+                child: InkWell(
+                  onTap: () => Navigator.pop(dialogContext, false),
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(color: Color(0xFFF0F1F8), shape: BoxShape.circle),
+                    child: const Icon(Icons.close_rounded, color: Color(0xFF77748E), size: 15),
+                  ),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 14),
+            Text(content, textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 11, height: 1.45, color: Color(0xFF555566))),
+            const SizedBox(height: 18),
+            SizedBox(width: double.infinity, height: 40,
+              child: FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: confirmColor,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: Text(confirmText,
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Future<bool> _cancel(Map<String,dynamic> b) async {
     final membership=b['bookingType']=='membership';
     final sessionKey=b['sessionKey']?.toString();
-    final confirmed=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(
-      title:const Text('Xác nhận huỷ lịch'),
-      content:Text(membership?'Huỷ buổi này sẽ hoàn lại 1 lượt nếu còn ít nhất 24 giờ trước giờ chơi.':'Huỷ đơn đang chờ thanh toán và giải phóng khung giờ?'),
-      actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('Giữ lịch')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Huỷ lịch'))],
-    ));
-    if(confirmed!=true || !mounted) return;
+    final confirmed=await _showScheduleConfirm(
+      title: 'Xác nhận huỷ lịch',
+      content: membership
+          ? 'Huỷ buổi này sẽ hoàn lại 1 lượt nếu còn ít nhất 24 giờ trước giờ chơi.'
+          : 'Huỷ đơn đang chờ thanh toán và giải phóng khung giờ?',
+      confirmText: 'Xác nhận huỷ',
+      confirmColor: _purple,
+    );
+    if(confirmed!=true || !mounted) return false;
     try {
       final token=await _token();
       final id=b['id'].toString();
@@ -218,42 +279,114 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
       if(r.statusCode!=200 || data is! Map || data['success']!=true) throw Exception(data is Map ? data['message']?.toString()??'Không thể huỷ lịch.' : 'Không thể huỷ lịch.');
       await refresh(silent:true);
       if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Đã huỷ lịch thành công.')));
+      return true;
     } catch(e) {
       if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(e.toString().replaceFirst('Exception: ',''))));
+      return false;
     }
   }
 
-  void _details(Map<String,dynamic> b) {
-    Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => _BookingDetailPage(
-        booking: b,
-        venueName: fieldNames[b['fieldId']] ?? b['fieldId']?.toString() ?? 'Sân',
-        imageUrl: fieldImages[b['fieldId']],
-        selections: _selections(b),
-        statusLabel: _status(b),
-        canPay: _canPay(b),
-        canCancel: _canCancel(b),
-        remainingLabel: _pending(b) ? (_canPay(b) ? _minutesLabel(b) : 'Đã hết 10 phút giữ chỗ') : null,
-        onPay: () => _resumePayment(b),
-        onCancel: () => _cancel(b),
-        onRefundRequest: () => _requestRefund(b),
-      ),
-    )).then((_) { if (mounted) refresh(silent:true); });
+  // Đọc lại dữ liệu đã cập nhật nhưng giữ nguyên route Chi tiết đặt sân.
+  Future<Map<String, dynamic>?> _freshDetailBooking(Map<String, dynamic> previous) async {
+    try {
+      final token = await _token();
+      final response = await http.get(
+        Uri.parse('${ApiClient.baseUrl}/my-bookings').replace(
+          queryParameters: {'_fresh': DateTime.now().millisecondsSinceEpoch.toString()},
+        ),
+        headers: {'Authorization': 'Bearer $token', 'Cache-Control': 'no-cache'},
+      ).timeout(const Duration(seconds: 18));
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      if (response.statusCode != 200 || data is! Map || data['success'] != true) return null;
+      final orders = (data['bookings'] as List? ?? [])
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+      if (mounted) setState(() => bookings = orders);
+      final id = previous['id']?.toString();
+      final key = previous['sessionKey']?.toString();
+      for (final order in orders) {
+        if (order['id']?.toString() != id) continue;
+        final sessions = _sessions(order);
+        for (final session in sessions) {
+          if (session['sessionKey']?.toString() == key) return session;
+        }
+        if (key == null && sessions.isNotEmpty) return sessions.first;
+      }
+    } catch (_) {
+      // Giữ bản cũ nếu chưa đồng bộ được; không tự đóng trang chi tiết.
+    }
+    return null;
   }
 
-  Future<void> _requestRefund(Map<String,dynamic> b) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Yêu cầu huỷ và hoàn tiền'),
-        content: const Text('Nếu gửi yêu cầu trước giờ bắt đầu ít nhất 24 tiếng, bạn đủ điều kiện được hoàn 100% số tiền đã thanh toán. Yêu cầu sẽ chờ xử lý; sân chưa bị huỷ và tiền chưa được hoàn ngay.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Để sau')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Gửi yêu cầu')),
-        ],
+  void _details(Map<String,dynamic> b) {
+    final current = ValueNotifier<Map<String, dynamic>>(Map<String, dynamic>.from(b));
+    bool detailOpen = true;
+
+    Future<void> syncDetail({bool cancelled = false, bool refundRequested = false}) async {
+      final fresh = await _freshDetailBooking(current.value);
+      if (!detailOpen) return;
+      if (fresh != null) {
+        current.value = fresh;
+      } else {
+        final fallback = Map<String, dynamic>.from(current.value);
+        if (cancelled) fallback['status'] = 'cancelled';
+        if (refundRequested) {
+          if (fallback['sessionKey'] == null) {
+            fallback['refundRequestStatus'] = 'pending';
+          } else {
+            final key = fallback['sessionKey'].toString().replaceAll('|', '__');
+            final requests = Map<String, dynamic>.from(fallback['refundSessionRequests'] as Map? ?? {});
+            requests[key] = {'status': 'pending'};
+            fallback['refundSessionRequests'] = requests;
+          }
+        }
+        current.value = fallback;
+      }
+    }
+
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => ValueListenableBuilder<Map<String, dynamic>>(
+        valueListenable: current,
+        builder: (detailContext, booking, _) => _BookingDetailPage(
+          booking: booking,
+          venueName: fieldNames[booking['fieldId']] ?? booking['fieldId']?.toString() ?? 'Sân',
+          imageUrl: fieldImages[booking['fieldId']],
+          selections: _selections(booking),
+          statusLabel: _status(booking),
+          canPay: _canPay(booking),
+          canCancel: _canCancel(booking),
+          remainingLabel: _pending(booking)
+              ? (_canPay(booking) ? _minutesLabel(booking) : 'Đã hết 10 phút giữ chỗ')
+              : null,
+          onPay: () async {
+            await _resumePayment(current.value);
+            if (detailContext.mounted) await syncDetail();
+          },
+          onCancel: () async {
+            final ok = await _cancel(current.value);
+            if (ok && detailContext.mounted) await syncDetail(cancelled: true);
+          },
+          onRefundRequest: () async {
+            final ok = await _requestRefund(current.value);
+            if (ok && detailContext.mounted) await syncDetail(refundRequested: true);
+          },
+        ),
       ),
+    )).then((_) {
+      detailOpen = false;
+      current.dispose();
+      if (mounted) refresh(silent: true);
+    });
+  }
+
+  Future<bool> _requestRefund(Map<String,dynamic> b) async {
+    final confirmed = await _showScheduleConfirm(
+      title: 'Yêu cầu huỷ và hoàn tiền',
+      content: 'Yêu cầu trước giờ bắt đầu ít nhất 24 giờ có thể được hoàn 100% số tiền đã thanh toán. Sân chỉ được huỷ sau khi yêu cầu được xử lý.',
+      confirmText: 'Gửi yêu cầu',
     );
-    if (confirmed != true || !mounted) return;
+    if (confirmed != true || !mounted) return false;
     try {
       final token = await _token();
       final response = await http.post(
@@ -267,8 +400,10 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
       }
       await refresh(silent: true);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã gửi yêu cầu. Lịch vẫn giữ nguyên cho đến khi được xử lý.')));
+      return true;
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))));
+      return false;
     }
   }
 
@@ -428,14 +563,18 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
               ],
             ]),
           ),
+        if (orderIds.isNotEmpty)
           const Padding(
-          padding: EdgeInsets.fromLTRB(8, 5, 8, 15),
-          child: Divider(
-            height: 1,
-            thickness: 1,
-            color: Color(0xFFD9D6E0),
+            padding: EdgeInsets.fromLTRB(8, 5, 8, 15),
+            child: Row(children: [
+              Expanded(child: Divider(height: 1, thickness: 1, color: Color(0xFFD9D6E0))),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12),
+                child: Text('Hết', style: TextStyle(fontSize: 10, color: Color(0xFF85818D), fontWeight: FontWeight.w500)),
+              ),
+              Expanded(child: Divider(height: 1, thickness: 1, color: Color(0xFFD9D6E0))),
+            ]),
           ),
-        ),
       ]))),
     ]))));
   }
@@ -499,17 +638,29 @@ class _BookingDetailPage extends StatelessWidget {
     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16),
       border: Border.all(color: const Color(0xFFEAE6F2))),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(heading, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: _purple)),
+      Text(heading, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: _purple)),
       const SizedBox(height: 10),
-      DefaultTextStyle.merge(style: const TextStyle(fontSize: 13), child: content),
+      DefaultTextStyle.merge(style: const TextStyle(fontSize: 12), child: content),
     ]),
   );
 
   Widget info(String label, String value) => Padding(
     padding: const EdgeInsets.only(bottom: 8),
     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      SizedBox(width: 120, child: Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54))),
-      Expanded(child: Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+      SizedBox(width: 112, child: Text(label, style: const TextStyle(fontSize: 10, color: Colors.black54))),
+      Expanded(child: Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+    ]),
+  );
+
+  Widget _heroInfo(IconData icon, String label) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.17),
+      borderRadius: BorderRadius.circular(10)),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, size: 13, color: Colors.white),
+      const SizedBox(width: 5),
+      Text(label, style: const TextStyle(color: Colors.white, fontSize: 10,
+        fontWeight: FontWeight.w600)),
     ]),
   );
 
@@ -543,19 +694,34 @@ class _BookingDetailPage extends StatelessWidget {
                     : Image.network(imageUrl!, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.sports_tennis, color: Colors.white)))),
               const SizedBox(width: 10),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(venueName, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(venueName, maxLines: 2, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
-                Text(member ? 'Đặt bằng thẻ hội viên' : 'Đặt sân thường', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                Text(member ? 'Đặt bằng thẻ hội viên' : 'Đặt sân thường',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12)),
               ])),
             ]),
             const SizedBox(height: 12),
-            Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(color: statusBackground, borderRadius: BorderRadius.circular(10)),
-              child: Row(children: [
-                Icon(statusIcon, color: statusColor, size: 18),
-                const SizedBox(width: 7),
-                Expanded(child: Text(statusLabel, style: TextStyle(color: statusColor, fontSize: 13, fontWeight: FontWeight.bold))),
-              ])),
+            Wrap(spacing: 6, runSpacing: 6, children: [
+              _heroInfo(Icons.calendar_today_outlined, first['date']?.toString() ?? '-'),
+              _heroInfo(Icons.access_time_rounded, '${first['startTime'] ?? '-'}–${first['endTime'] ?? '-'}'),
+              _heroInfo(Icons.sports_tennis, 'Sân ${(first['courtId'] ?? 'court_1').toString().replaceFirst('court_', '')}'),
+            ]),
+          ]),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            color: statusBackground,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE3E1EA)),
+          ),
+          child: Row(children: [
+            Icon(statusIcon, color: statusColor, size: 16),
+            const SizedBox(width: 7),
+            Expanded(child: Text(statusLabel, style: TextStyle(
+              fontSize: 12, fontWeight: FontWeight.w700, color: statusColor))),
           ]),
         ),
         const SizedBox(height: 12),
@@ -588,18 +754,31 @@ class _BookingDetailPage extends StatelessWidget {
         ])),
         section('Hỗ trợ', Text(cancelled ? 'Buổi đã huỷ được lưu trong lịch sử để tra cứu. Nếu có yêu cầu hoàn tiền, trạng thái sẽ được cập nhật sau khi xử lý.' : 'Chỉ buổi chưa diễn ra và còn ít nhất 24 giờ trước giờ bắt đầu mới được yêu cầu hoàn 100%. Yêu cầu phải được xử lý trước khi tiền được hoàn.')),
         if (canPay) Padding(padding: const EdgeInsets.only(bottom: 12),
-          child: FilledButton.icon(onPressed: () async { Navigator.pop(context); await onPay(); },
-            icon: const Icon(Icons.payment), label: const Text('Thanh toán ngay'),
+          child: FilledButton.icon(onPressed: () async { await onPay(); },
+            icon: const Icon(Icons.payment, size: 18), label: const Text('Thanh toán ngay', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
             style: FilledButton.styleFrom(backgroundColor: _purple, minimumSize: const Size.fromHeight(48)))),
         if (canCancel) Padding(padding: const EdgeInsets.only(bottom: 12),
-          child: OutlinedButton.icon(onPressed: () async { Navigator.pop(context); await onCancel(); },
-            icon: const Icon(Icons.cancel_outlined, size: 21),
-            label: const Text('Huỷ lịch đặt', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(58)))),
+          child: OutlinedButton.icon(onPressed: () async { await onCancel(); },
+            icon: const Icon(Icons.cancel_outlined, size: 18),
+            label: const Text('Huỷ lịch đặt', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
+              backgroundColor: const Color(0xFFDFDCF9),
+              foregroundColor: _purple,
+              side: const BorderSide(color: Color(0xFFDFDCF9)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            ))),
         if (eligibleRefund) Padding(padding: const EdgeInsets.only(bottom: 12),
-          child: OutlinedButton.icon(onPressed: () async { Navigator.pop(context); await onRefundRequest(); },
-            icon: const Icon(Icons.support_agent), label: const Text('Yêu cầu huỷ / hoàn tiền'),
-            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)))),
+          child: OutlinedButton.icon(onPressed: () async { await onRefundRequest(); },
+            icon: const Icon(Icons.support_agent, size: 18),
+            label: const Text('Yêu cầu huỷ / hoàn tiền', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(50),
+              backgroundColor: const Color(0xFFDFDCF9),
+              foregroundColor: _purple,
+              side: const BorderSide(color: Color(0xFFDFDCF9)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            ))),
       ]),
     );
   }
@@ -663,15 +842,15 @@ class _RefundTrackingCardState extends State<_RefundTrackingCard> {
     if (status == 'none' && _error == null) return const SizedBox.shrink();
     final succeeded = status == 'succeeded';
     final failed = status == 'failed';
-    final title = succeeded ? 'Hoàn tiền thành công (mô phỏng)' : failed ? 'Hoàn tiền mô phỏng thất bại'
-      : status == 'processing' ? 'Đang hoàn tiền (sandbox)' : 'Đang kiểm tra hoàn tiền';
+    final title = succeeded ? 'Hoàn tiền thành công' : failed ? 'Hoàn tiền thất bại'
+      : status == 'processing' ? 'Đang xử lý hoàn tiền' : 'Đang kiểm tra hoàn tiền';
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFEAE6F2))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Tiến trình huỷ & hoàn tiền', style: TextStyle(fontSize:15,fontWeight:FontWeight.w800,color:_purple)),
+        const Text('Tiến trình huỷ & hoàn tiền', style: TextStyle(fontSize:14,fontWeight:FontWeight.w800,color:_purple)),
         const SizedBox(height: 10),
         Row(children: [
           Icon(succeeded ? Icons.check_circle : failed ? Icons.error_outline : Icons.hourglass_top,
@@ -682,15 +861,12 @@ class _RefundTrackingCardState extends State<_RefundTrackingCard> {
         ]),
         if (d != null && status != 'none') ...[
           const SizedBox(height: 10),
-          Text('Số tiền hoàn: ${_money(d['amount'])}', style: const TextStyle(fontSize:13)),
-          const SizedBox(height: 5),
-          Text('Mã hoàn tiền: ${d['refundId'] ?? '-'}', style: const TextStyle(fontSize:12)),
-          if (d['requestedAt'] != null) Text('Đã yêu cầu: ${d['requestedAt']}',style:const TextStyle(fontSize:12)),
-          if (d['refundedAt'] != null) Text('Hoàn tất: ${d['refundedAt']}',style:const TextStyle(fontSize:12)),
+          Text('Số tiền hoàn: ${_money(d['amount'])}', style: const TextStyle(fontSize:12, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 2),
+          Text('Mã hoàn tiền: ${d['refundId'] ?? '-'}', style: const TextStyle(fontSize:10)),
+          if (d['requestedAt'] != null) Text('Đã yêu cầu: ${d['requestedAt']}',style:const TextStyle(fontSize:10)),
+          if (d['refundedAt'] != null) Text('Hoàn tất: ${d['refundedAt']}',style:const TextStyle(fontSize:10)),
           if (d['failureReason'] != null) Text('${d['failureReason']}',style:const TextStyle(color:_red,fontSize:12)),
-          const SizedBox(height: 8),
-          const Text('Chỉ là giao dịch sandbox. Không có tiền thật được chuyển.',
-            style: TextStyle(fontSize:11,color:_grey)),
         ],
         if (_error != null) Padding(padding:const EdgeInsets.only(top:8),
           child: Text(_error!,style:const TextStyle(fontSize:12,color:_red))),

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -42,10 +43,164 @@ class _BookingScreenState extends State<BookingScreen> {
   DateTime _date = DateUtils.dateOnly(DateTime.now());
   DateTime _now = DateTime.now();
   Timer? _clock;
+  Timer? _availabilityTimer;
+  bool _pollingAvailability = false;
   bool _loading = false;
   bool _submitting = false;
   String? _error;
   int _request = 0;
+  List<Map<String, dynamic>> _membershipCards = [];
+  String? _selectedMembershipId;
+  bool _useMembership = false;
+
+  Map<String, dynamic>? get _chosenMembership {
+    for (final m in _membershipCards) {
+      if (m['id']?.toString() == _selectedMembershipId) return m;
+    }
+    return null;
+  }
+
+  Future<void> _loadMembershipCards() async {
+    try {
+      final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+      if (token == null) return;
+      final response = await http.get(
+        Uri.parse('${widget.baseUrl}/my-memberships'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) return;
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      if (!mounted || data is! Map || data['memberships'] is! List) return;
+      final list = (data['memberships'] as List)
+          .whereType<Map>()
+          .map((m) => Map<String, dynamic>.from(m))
+          .where((m) => m['fieldId']?.toString() == widget.fieldId &&
+              m['status'] == 'active' &&
+              (num.tryParse(m['remainingSlots']?.toString() ?? '0') ?? 0) > 0)
+          .toList();
+
+      // Thẻ đã mua chỉ chứa membershipId; điều kiện sử dụng nằm ở gói gốc.
+      // Lấy đúng dữ liệu Firestore thay vì hiển thị điều kiện giả định.
+      await Future.wait(list.map((card) async {
+        final packageId = card['membershipId']?.toString();
+        if (packageId == null || packageId.isEmpty) return;
+        try {
+          final snapshot = await FirebaseFirestore.instance
+              .collection('memberships').doc(packageId).get();
+          final package = snapshot.data();
+          if (package != null) {
+            card['packageApplyTime'] = package['applyTime'];
+            card['packageAllowedWeekdays'] = package['allowedWeekdays'];
+          }
+        } catch (error) {
+          debugPrint('Không tải được điều kiện thẻ $packageId: $error');
+        }
+      }));
+      if (!mounted) return;
+      setState(() {
+        _membershipCards = list;
+        if (!list.any((m) => m['id']?.toString() == _selectedMembershipId)) {
+          _selectedMembershipId = null;
+          _useMembership = false;
+        }
+      });
+    } catch (_) {
+      // Thanh toán thường vẫn khả dụng nếu API thẻ không phản hồi.
+    }
+  }
+
+  String _membershipHours(Map<String, dynamic> card) {
+    final rule = (card['packageApplyTime'] ?? card['applyTime'])?.toString().trim() ?? '';
+    final weekdays = card['packageAllowedWeekdays'];
+    if (rule.isEmpty) return 'Chưa có thông tin giờ áp dụng';
+
+    // applyTime thường đã bao gồm cả giờ và thứ, ví dụ:
+    // "06:00 - 16:00 (Thứ 2 - Thứ 6)".
+    if (RegExp(r'thứ|t2|t3|t4|t5|t6|t7|cn|chủ nhật', caseSensitive: false)
+        .hasMatch(rule)) return rule;
+
+    if (weekdays is List && weekdays.isNotEmpty) {
+      final days = weekdays.map((day) {
+        final number = int.tryParse(day.toString());
+        if (number == 7 || number == 0) return 'CN';
+        if (number != null && number >= 1 && number <= 6) {
+          return 'Thứ ${number + 1}';
+        }
+        return null;
+      }).whereType<String>().toList();
+      if (days.isNotEmpty) return '$rule · ${days.join(', ')}';
+    }
+    return rule;
+  }
+
+  Widget _membershipOption() {
+    if (_selected.isEmpty || _membershipCards.isEmpty) return const SizedBox.shrink();
+    final card = _chosenMembership ?? _membershipCards.first;
+    final chosen = _useMembership && _selectedMembershipId == card['id']?.toString();
+    final remaining = card['remainingSlots']?.toString() ?? '0';
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 5, 16, 7),
+      padding: const EdgeInsets.all(11),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F3FF),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFD9CDFB)),
+      ),
+      child: Row(children: [
+        Container(width: 36, height: 36, alignment: Alignment.center,
+          decoration: BoxDecoration(color: const Color(0xFFE7DEFF), borderRadius: BorderRadius.circular(9)),
+          child: const Icon(Icons.card_membership_rounded, color: primary, size: 19)),
+        const SizedBox(width: 9),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text((card['membershipName'] ?? 'Thẻ hội viên').toString(),
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: primary)),
+          const SizedBox(height: 3),
+          const Text('Sử dụng 1 lượt', style: TextStyle(fontSize: 11, color: Color(0xFF77748E))),
+          Text(_membershipHours(card), maxLines: 2,
+            style: const TextStyle(fontSize: 11, color: Color(0xFF77748E))),
+        ])),
+        const SizedBox(width: 7),
+        Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+            decoration: BoxDecoration(color: const Color(0xFFE9E1FF), borderRadius: BorderRadius.circular(18)),
+            child: Text('Còn $remaining lượt', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: primary))),
+          const SizedBox(height: 7),
+          SizedBox(height: 30, child: OutlinedButton(
+            onPressed: _submitting ? null : () async {
+              if (chosen) { setState(() => _useMembership = false); return; }
+              Map<String, dynamic>? picked = card;
+              if (_membershipCards.length > 1) {
+                picked = await showModalBottomSheet<Map<String, dynamic>>(
+                  context: context, backgroundColor: Colors.white,
+                  showDragHandle: true,
+                  builder: (ctx) => SafeArea(child: ListView(shrinkWrap: true,
+                    children: [
+                      const Padding(padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
+                        child: Text('Chọn thẻ hội viên', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700))),
+                      for (final m in _membershipCards) ListTile(
+                        title: Text((m['membershipName'] ?? 'Thẻ hội viên').toString(), style: const TextStyle(fontSize: 12)),
+                        subtitle: Text('Còn ${m['remainingSlots']} lượt · ${_membershipHours(m)}', style: const TextStyle(fontSize: 11)),
+                        onTap: () => Navigator.pop(ctx, m)),
+                    ])),
+                );
+              }
+              if (picked != null && mounted) setState(() {
+                _selectedMembershipId = picked!['id']?.toString();
+                _useMembership = true;
+              });
+            },
+            style: OutlinedButton.styleFrom(
+              backgroundColor: chosen ? primary : Colors.white,
+              foregroundColor: chosen ? Colors.white : primary,
+              side: const BorderSide(color: primary),
+              padding: const EdgeInsets.symmetric(horizontal: 9),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9))),
+            child: Text(chosen ? 'Đã chọn' : 'Dùng thẻ', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)))),
+        ]),
+      ]),
+    );
+  }
 
   String _dateKey(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
@@ -66,11 +221,16 @@ class _BookingScreenState extends State<BookingScreen> {
       if (mounted) setState(() => _now = DateTime.now());
     });
     _load();
+    _loadMembershipCards();
+    _availabilityTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted && !_loading && !_submitting) _refreshAvailability();
+    });
   }
 
   @override
   void dispose() {
     _clock?.cancel();
+    _availabilityTimer?.cancel();
     _request++;
     super.dispose();
   }
@@ -169,6 +329,46 @@ class _BookingScreenState extends State<BookingScreen> {
     }
   }
 
+
+  // Chỉ cập nhật tình trạng chỗ trống, không xóa khung giờ đang chọn.
+  // Backend vẫn kiểm tra transaction khi đặt để chống 2 tài khoản đặt trùng.
+  Future<void> _refreshAvailability() async {
+    if (_pollingAvailability || _loading || _submitting) return;
+    _pollingAvailability = true;
+    final date = _dateKey(_date);
+    try {
+      final response = await http.get(
+        Uri.parse('${widget.baseUrl}/fields/${Uri.encodeComponent(widget.fieldId)}/availability')
+            .replace(queryParameters: {'date': date}),
+        headers: {'Cache-Control': 'no-cache'},
+      ).timeout(const Duration(seconds: 12));
+      if (!mounted || date != _dateKey(_date) || response.statusCode != 200) return;
+      final json = jsonDecode(utf8.decode(response.bodyBytes));
+      if (json is! Map || json['success'] != true || json['courts'] is! List) return;
+      final nextBusy = <String, Set<String>>{};
+      for (final court in (json['courts'] as List)) {
+        if (court is! Map || court['slots'] is! List) continue;
+        final id = court['courtId'].toString();
+        nextBusy[id] = (court['slots'] as List)
+            .where((slot) => slot is Map && slot['available'] != true)
+            .map<String>((slot) => slot['startTime'].toString()).toSet();
+      }
+      if (!mounted || date != _dateKey(_date)) return;
+      setState(() {
+        _busy..clear()..addAll(nextBusy);
+        _selected.removeWhere((key) {
+          final parts = key.split('|');
+          return parts.length == 2 && (_busy[parts[0]]?.contains(parts[1]) ?? false);
+        });
+      });
+    } catch (error) {
+      // Không xóa lịch đang hiển thị khi mạng yếu.
+      debugPrint('Refresh availability: $error');
+    } finally {
+      _pollingAvailability = false;
+    }
+  }
+
   void _changeDate(int offset) {
     final next = _date.add(Duration(days: offset));
     if (next.isBefore(DateUtils.dateOnly(DateTime.now()))) return;
@@ -177,6 +377,10 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   Future<void> _book() async {
+    if (_useMembership && _selectedMembershipId != null) {
+      await _bookWithMembership();
+      return;
+    }
     if (_selected.isEmpty || _submitting) return;
     setState(() => _submitting = true);
     try {
@@ -268,50 +472,48 @@ class _BookingScreenState extends State<BookingScreen> {
 
 
   Future<void> _bookWithMembership() async {
-    if (_submitting || _selected.isEmpty) return;
+    if (_submitting || _selected.isEmpty || !_useMembership || _selectedMembershipId == null) return;
     final chosen = _selected.map((key) {
       final parts = key.split('|');
-      return {'date':_dateKey(_date),'courtId':parts[0],'startTime':parts[1]};
+      return {'date': _dateKey(_date), 'courtId': parts[0], 'startTime': parts[1]};
     }).toList();
-    if(chosen.length > 3 || chosen.map((s)=>s['courtId']).toSet().length != 1) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Hội viên chỉ được đặt tối đa 3 giờ liên tiếp trên cùng một sân.')));
+    if (chosen.length > 3 || chosen.map((s) => s['courtId']).toSet().length != 1) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:
+        Text('Hội viên chỉ được đặt tối đa 3 giờ liên tiếp trên cùng một sân.')));
       return;
     }
-    final times=chosen.map((s)=>s['startTime']!).toList()..sort();
-    for(var i=1;i<times.length;i++) {
-      if(int.parse(times[i].substring(0,2)) != int.parse(times[i-1].substring(0,2))+1) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Hãy chọn các giờ liên tiếp.')));
+    final times = chosen.map((s) => s['startTime']!).toList()..sort();
+    for (var i = 1; i < times.length; i++) {
+      if (int.parse(times[i].substring(0, 2)) != int.parse(times[i - 1].substring(0, 2)) + 1) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Hãy chọn các giờ liên tiếp.')));
         return;
       }
     }
-    setState(()=>_submitting=true);
+    setState(() => _submitting = true);
     try {
-      final token=await FirebaseAuth.instance.currentUser?.getIdToken();
-      if(token==null) throw Exception('Vui lòng đăng nhập lại.');
-      final headers={'Authorization':'Bearer $token','Content-Type':'application/json'};
-      final list=await http.get(Uri.parse('${widget.baseUrl}/my-memberships'),headers:headers).timeout(const Duration(seconds:20));
-      final decoded=jsonDecode(utf8.decode(list.bodyBytes));
-      if(list.statusCode!=200 || decoded is! Map || decoded['success']!=true) throw Exception(decoded is Map ? decoded['message'] : 'Không thể tải thẻ');
-      final eligible=(decoded['memberships'] as List? ?? []).where((m)=>m is Map && m['fieldId']==widget.fieldId && m['status']=='active' && (m['remainingSlots'] is num && m['remainingSlots']>0)).toList();
-      if(!mounted)return;
-      if(eligible.isEmpty) throw Exception('Bạn chưa có thẻ hội viên còn lượt áp dụng cho sân này.');
-      final selectedCard=await showDialog<dynamic>(context:context,builder:(ctx)=>SimpleDialog(
-        title:const Text('Chọn thẻ hội viên (trừ 1 lượt)'),
-        children:[for(final m in eligible) SimpleDialogOption(
-          onPressed:()=>Navigator.pop(ctx,m),
-          child:Text('${m['membershipName'] ?? 'Hội viên'} — còn ${m['remainingSlots']} lượt'),
-        )],
-      ));
-      if(selectedCard==null || !mounted)return;
-      final response=await http.post(Uri.parse('${widget.baseUrl}/membership-bookings'),headers:headers,body:jsonEncode({'membershipCardId':selectedCard['id'],'fieldId':widget.fieldId,'selections':chosen})).timeout(const Duration(seconds:30));
-      final data=jsonDecode(utf8.decode(response.bodyBytes));
-      if(response.statusCode!=201 || data is! Map || data['success']!=true) throw Exception(data is Map ? data['message'] : 'Không đặt được sân');
-      if(!mounted)return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Đặt sân hội viên thành công! Còn ${data['remainingSlots']} lượt.')));
+      final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+      if (token == null) throw Exception('Vui lòng đăng nhập lại.');
+      final response = await http.post(
+        Uri.parse('${widget.baseUrl}/membership-bookings'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        body: jsonEncode({'membershipCardId': _selectedMembershipId,
+          'fieldId': widget.fieldId, 'selections': chosen}),
+      ).timeout(const Duration(seconds: 30));
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      if (response.statusCode != 201 || data is! Map || data['success'] != true) {
+        throw Exception(data is Map ? data['message'] : 'Không đặt được sân');
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:
+        Text('Đặt sân hội viên thành công! Còn ${data['remainingSlots']} lượt.')));
+      setState(() { _useMembership = false; _selectedMembershipId = null; });
+      await _loadMembershipCards();
       await _load();
-    } catch(e) {
-      if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Không thể dùng thẻ: $e')));
-    } finally {if(mounted)setState(()=>_submitting=false);}
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Không thể dùng thẻ: $e')));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   Widget _schedule() {
@@ -524,7 +726,7 @@ class _BookingScreenState extends State<BookingScreen> {
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 Text(
-                  '${_money(_selected.length * widget.price)}đ',
+                  _useMembership && _selectedMembershipId != null ? '0đ' : '${_money(_selected.length * widget.price)}đ',
                   style: const TextStyle(
                     fontSize: 19,
                     fontWeight: FontWeight.bold,
@@ -660,7 +862,13 @@ class _BookingScreenState extends State<BookingScreen> {
                   child: FilledButton(
                     style: FilledButton.styleFrom(backgroundColor: primary, fixedSize: const Size.fromHeight(45), minimumSize: const Size.fromHeight(45), padding: EdgeInsets.zero, textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                     onPressed: _selected.isNotEmpty && !_submitting
-                        ? _book
+                        ? () {
+                            if (_useMembership && _selectedMembershipId != null) {
+                              _bookWithMembership();
+                            } else {
+                              _book();
+                            }
+                          }
                         : null,
                     child: Text(_submitting ? 'Đang đặt...' : 'Tiếp tục'),
                   ),
@@ -786,14 +994,7 @@ class _BookingScreenState extends State<BookingScreen> {
               ],
             ),
           ),
-          if (_selected.isNotEmpty) Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-            child: OutlinedButton.icon(
-              onPressed: _submitting ? null : _bookWithMembership,
-              icon: const Icon(Icons.card_membership),
-              label: const Text('Đặt bằng thẻ hội viên (trừ 1 lượt)'),
-            ),
-          ),
+           _membershipOption(),
           _summary(),
         ],
       )),
