@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'firebase_options.dart';
 import 'sporty_push_service.dart';
+import 'sporty_notification_navigation.dart';
 import 'screen/login.dart';
 import 'screen/home.dart';
 import 'screen/splash_screen.dart';
@@ -26,6 +27,7 @@ class SportsBookingApp extends StatelessWidget {
     const secondary=Color(0xFFC86FC9);
     const background=Color(0xFFF6F7EB);
     return MaterialApp(
+      navigatorKey: sportyNavigatorKey,
       debugShowCheckedModeBanner:false,
       title:'SPORTY',
       theme:ThemeData(
