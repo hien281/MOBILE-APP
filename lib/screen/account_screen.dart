@@ -12,6 +12,7 @@ import 'field_detail.dart';
 import 'help_center_screen.dart';
 import 'home.dart';
 import 'login.dart';
+import 'notifications_screen.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key, this.isActive = true});
@@ -594,6 +595,21 @@ class _AccountScreenState extends State<AccountScreen> {
                           context,
                           MaterialPageRoute(
                             builder: (_) => const FavoriteFieldsScreen(accessToken: ''),
+                          ),
+                        );
+                      },
+                    ),
+                    const Divider(height: 1, indent: 54, color: Color(0xFFF0F1F8)),
+
+                    // Thông báo
+                    _buildMenuTile(
+                      icon: Icons.notifications_none_rounded,
+                      title: 'Thông báo',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const NotificationsScreen(),
                           ),
                         );
                       },
