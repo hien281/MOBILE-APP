@@ -9,7 +9,7 @@ class SportySocialAuth {
       return FirebaseAuth.instance.signInWithPopup(provider);
     }
     if (provider is GoogleAuthProvider) {
-      await GoogleSignIn.instance.initialize();
+      await GoogleSignIn.instance.initialize(serverClientId: '499981685398-81d3cakehm586r74rd568tiiir1lq7v9.apps.googleusercontent.com');
       final account = await GoogleSignIn.instance.authenticate();
       final auth = account.authentication;
       if (auth.idToken == null) {
