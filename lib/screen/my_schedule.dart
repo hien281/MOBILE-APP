@@ -31,6 +31,15 @@ IconData _sportDisplayIcon(String raw) {
   }
 }
 
+String _bookingTimeRange(List<Map<String, dynamic>> selections, Map<String, dynamic> fallback) {
+  final slots = selections.isNotEmpty ? selections : [fallback];
+  final starts = slots.map((s) => s['startTime']?.toString() ?? '').where((s) => RegExp(r'^\d{2}:\d{2}$').hasMatch(s)).toList()..sort();
+  final ends = slots.map((s) => s['endTime']?.toString() ?? '').where((s) => RegExp(r'^\d{2}:\d{2}$').hasMatch(s)).toList()..sort();
+  final start = starts.isNotEmpty ? starts.first : '-';
+  final end = ends.isNotEmpty ? ends.last : '-';
+  return '$start–$end';
+}
+
 class MyScheduleScreen extends StatefulWidget {
   final bool isActive;
   final String? initialBookingId;
@@ -472,7 +481,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
           Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
             Text(fieldNames[id]??id,maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(color:_purple,fontSize:14,fontWeight:FontWeight.w700)),
             const SizedBox(height:4),
-            Text('${first['date']??'-'} • ${first['startTime']??'-'}–${first['endTime']??'-'}',style:const TextStyle(fontSize:11,color:Colors.black87)),
+            Text('${first['date']??'-'} • ${_bookingTimeRange(selections, first)}',style:const TextStyle(fontSize:11,color:Colors.black87)),
             const SizedBox(height:5),
             if ((fieldSports[id] ?? b['sportType']?.toString() ?? '').trim().isNotEmpty) ...[
               Row(mainAxisSize: MainAxisSize.min, children: [
@@ -760,7 +769,7 @@ class _BookingDetailPage extends StatelessWidget {
             const SizedBox(height: 12),
             Wrap(spacing: 6, runSpacing: 6, children: [
               _heroInfo(Icons.calendar_today_outlined, first['date']?.toString() ?? '-'),
-              _heroInfo(Icons.access_time_rounded, '${first['startTime'] ?? '-'}–${first['endTime'] ?? '-'}'),
+              _heroInfo(Icons.access_time_rounded, _bookingTimeRange(selections, first)),
               _heroInfo(Icons.grid_view_rounded, 'Sân ${(first['courtId'] ?? 'court_1').toString().replaceFirst('court_', '')}'),
               if (sportType.trim().isNotEmpty) _heroInfo(_sportDisplayIcon(sportType), _sportDisplayName(sportType)),
             ]),
