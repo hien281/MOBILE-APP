@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'register.dart';
+import '../sporty_social_auth.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -84,19 +85,15 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _socialLogin(AuthProvider provider) async {
     if (_loading) return;
 
-    if (!kIsWeb) {
-      _message('Đăng nhập Google/Facebook hiện chỉ hỗ trợ trên Web.');
-      return;
-    }
-
     setState(() => _loading = true);
 
     try {
-      await FirebaseAuth.instance.setPersistence(
-        _remember ? Persistence.LOCAL : Persistence.SESSION,
-      );
-
-      await FirebaseAuth.instance.signInWithPopup(provider);
+      if (kIsWeb) {
+        await FirebaseAuth.instance.setPersistence(
+          _remember ? Persistence.LOCAL : Persistence.SESSION,
+        );
+      }
+      await SportySocialAuth.signIn(provider);
     } on FirebaseAuthException catch (error) {
       if (error.code != 'popup-closed-by-user' &&
           error.code != 'cancelled-popup-request') {

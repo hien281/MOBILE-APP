@@ -223,7 +223,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     'assets/images/register_bg.jpg',
                     fit: BoxFit.cover,
                     alignment: Alignment.topCenter,
-                    errorBuilder: (_, __, ___) {
+                    errorBuilder: (_, _, _) {
                       return const ColoredBox(
                         color: Color(0xFFE0D5F7),
                         child: Center(

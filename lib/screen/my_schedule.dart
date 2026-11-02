@@ -420,7 +420,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
       decoration:BoxDecoration(color:Colors.white.withValues(alpha:0.77),borderRadius:BorderRadius.circular(16),border:Border.all(color:const Color(0xFFB7A4DF),width:0.85)),
       child:InkWell(borderRadius:BorderRadius.circular(20),onTap:()=>_details(b),child:Padding(padding:const EdgeInsets.all(11),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
         Row(children:[
-          ClipRRect(borderRadius:BorderRadius.circular(5),child:SizedBox(width:78,height:78,child:image==null?Container(color:const Color(0xFFF1EBFA),child:const Icon(Icons.sports_tennis,color:_purple,size:34)):Image.network(image,fit:BoxFit.cover,errorBuilder:(_,__,___)=>Container(color:const Color(0xFFF1EBFA),child:const Icon(Icons.sports_tennis,color:_purple))))),
+          ClipRRect(borderRadius:BorderRadius.circular(5),child:SizedBox(width:78,height:78,child:image==null?Container(color:const Color(0xFFF1EBFA),child:const Icon(Icons.sports_tennis,color:_purple,size:34)):Image.network(image,fit:BoxFit.cover,errorBuilder:(_,_,_)=>Container(color:const Color(0xFFF1EBFA),child:const Icon(Icons.sports_tennis,color:_purple))))),
           const SizedBox(width:10),
           Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
             Text(fieldNames[id]??id,maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(color:_purple,fontSize:14,fontWeight:FontWeight.w700)),
@@ -691,7 +691,7 @@ class _BookingDetailPage extends StatelessWidget {
                 child: SizedBox(width: 76, height: 76,
                   child: imageUrl == null
                     ? const ColoredBox(color: Color(0xFFEBE5FA), child: Icon(Icons.sports_tennis, size: 34, color: _purple))
-                    : Image.network(imageUrl!, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.sports_tennis, color: Colors.white)))),
+                    : Image.network(imageUrl!, fit: BoxFit.cover, errorBuilder: (_, _, _) => const Icon(Icons.sports_tennis, color: Colors.white)))),
               const SizedBox(width: 10),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(venueName, maxLines: 2, overflow: TextOverflow.ellipsis,

@@ -14,76 +14,55 @@ router.post('/push/register', requireAuth, async (req, res) => {
   try {
     const token = req.body?.token;
     if (!validToken(token)) return res.status(400).json({success:false,message:'FCM token không hợp lệ.'});
-    const tokenId=hashToken(token);
-    const ownerRef=db.collection('push_token_owners').doc(tokenId);
+    const tokenId = hashToken(token);
+    const ownerRef = db.collection('push_token_owners').doc(tokenId);
     const batch = db.batch();
-    batch.set(ownerRef, {
-      userId: req.user.id,
-      updatedAt: FieldValue.serverTimestamp()
-    });
-    batch.set(
-      db.collection('user_push_tokens').doc(req.user.id)
-        .collection('devices').doc(tokenId),
-      {token, updatedAt: FieldValue.serverTimestamp()}
-    );
+    batch.set(ownerRef, {userId:req.user.id,updatedAt:FieldValue.serverTimestamp()});
+    batch.set(db.collection('user_push_tokens').doc(req.user.id).collection('devices').doc(tokenId),
+      {token,updatedAt:FieldValue.serverTimestamp()});
     await batch.commit();
     res.json({success:true});
-  } catch (error) {
-    console.error('Push registration failed:', {
-      code: error?.code,
-      message: error?.message,
-      stack: error?.stack
-    });
+  } catch(error) {
+    console.error('Push registration failed:', error);
     res.status(500).json({success:false,message:'Không lưu được thiết bị.'});
   }
 });
 
-router.post('/push/unregister', requireAuth, async (req, res) => {
+router.post('/push/unregister', requireAuth, async (req,res) => {
   try {
-    const token = req.body?.token;
-    if (!validToken(token)) return res.status(400).json({success:false});
+    const token=req.body?.token;
+    if(!validToken(token))return res.status(400).json({success:false});
     const tokenId=hashToken(token);
-    await db.collection('user_push_tokens').doc(req.user.id)
-      .collection('devices').doc(tokenId).delete();
+    await db.collection('user_push_tokens').doc(req.user.id).collection('devices').doc(tokenId).delete();
     const ownerRef=db.collection('push_token_owners').doc(tokenId);
     const owner=await ownerRef.get();
-    if(owner.exists && owner.data()?.userId===req.user.id) await ownerRef.delete();
+    if(owner.exists && owner.data()?.userId===req.user.id)await ownerRef.delete();
     res.json({success:true});
-  } catch(error) {
-    console.error('Push unregister:',error);
-    res.status(500).json({success:false});
-  }
+  } catch(error){console.error('Push unregister:',error);res.status(500).json({success:false});}
 });
 
 function vnDateAndTime(value) {
-  const d = new Date(value + VN_OFFSET_MS);
-  return {
-    date: d.toISOString().slice(0,10),
-    time: d.toISOString().slice(11,16)
-  };
+  const d=new Date(value+VN_OFFSET_MS);
+  return {date:d.toISOString().slice(0,10),time:d.toISOString().slice(11,16)};
 }
 function slotStartMs(s) {
-  if (!s || typeof s.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s.date) ||
-      typeof s.startTime !== 'string' || !/^\d{2}:\d{2}$/.test(s.startTime)) return NaN;
+  if(!s || typeof s.date!=='string' || !/^\d{4}-\d{2}-\d{2}$/.test(s.date) ||
+     typeof s.startTime!=='string' || !/^\d{2}:\d{2}$/.test(s.startTime))return NaN;
   return Date.parse(`${s.date}T${s.startTime}:00+07:00`);
 }
 function isConfirmed(b) {
-  return (b.status === 'confirmed' || b.status === 'booked') &&
-    (b.bookingType === 'membership' || b.paymentStatus === 'paid');
+  return (b.status==='confirmed' || b.status==='booked') &&
+    (b.bookingType==='membership' || b.paymentStatus==='paid');
 }
 
-// Hộp thư thông báo, chỉ cho phép người dùng đọc dữ liệu của chính mình.
-router.get('/notifications', requireAuth, async (req,res) => {
+router.get('/notifications',requireAuth,async(req,res)=>{
   try {
-    const snap = await db.collection('user_notifications').doc(req.user.id)
+    const snap=await db.collection('user_notifications').doc(req.user.id)
       .collection('items').orderBy('createdAt','desc').limit(100).get();
     res.json({success:true,notifications:snap.docs.map(d=>({id:d.id,...d.data(),createdAt:d.data().createdAt?.toDate?.()?.toISOString()||null}))});
-  } catch(error) {
-    console.error('List notifications:', error);
-    res.status(500).json({success:false,message:'Không tải được thông báo.'});
-  }
+  }catch(error){console.error('List notifications:',error);res.status(500).json({success:false,message:'Không tải được thông báo.'});}
 });
-router.post('/notifications/:id/read', requireAuth, async (req,res) => {
+router.post('/notifications/:id/read',requireAuth,async(req,res)=>{
   try {
     const id=req.params.id;
     if(!/^[a-f0-9]{64}$/.test(id))return res.sendStatus(400);
@@ -92,12 +71,9 @@ router.post('/notifications/:id/read', requireAuth, async (req,res) => {
     if(!snap.exists)return res.sendStatus(404);
     await ref.update({read:true,readAt:FieldValue.serverTimestamp()});
     res.json({success:true});
-  } catch(error) {
-    console.error('Read notification:',error);
-    res.status(500).json({success:false});
-  }
+  }catch(error){console.error('Read notification:',error);res.status(500).json({success:false});}
 });
-router.post('/notifications/read-all', requireAuth, async (req,res) => {
+router.post('/notifications/read-all',requireAuth,async(req,res)=>{
   try {
     const snap=await db.collection('user_notifications').doc(req.user.id)
       .collection('items').where('read','==',false).limit(100).get();
@@ -106,87 +82,77 @@ router.post('/notifications/read-all', requireAuth, async (req,res) => {
     snap.docs.forEach(d=>batch.update(d.ref,{read:true,readAt:FieldValue.serverTimestamp()}));
     await batch.commit();
     res.json({success:true,updated:snap.size});
-  }catch(error){ console.error('Read all:',error);res.status(500).json({success:false}); }
+  }catch(error){console.error('Read all:',error);res.status(500).json({success:false});}
 });
 
-// Được gọi bởi cron bên ngoài, mỗi 5 phút. Không dành cho người dùng thông thường.
-router.get('/internal/send-booking-reminders', async (req,res) => {
-  const secret = process.env.CRON_SECRET;
-  const authorization = req.get('authorization') || '';
-  if (!secret || authorization !== `Bearer ${secret}`) return res.sendStatus(401);
+// Scheduler should call this every 5 minutes. Covers short delays, but does not promise exact-minute delivery.
+router.get('/internal/send-booking-reminders',async(req,res)=>{
+  const secret=process.env.CRON_SECRET;
+  if(!secret || req.get('authorization')!==`Bearer ${secret}`)return res.sendStatus(401);
   try {
-    const now = Date.now();
-    const earliest = now + 55 * 60 * 1000;
-    const latest = now + 60 * 60 * 1000;
-    const days = new Set([vnDateAndTime(earliest).date, vnDateAndTime(latest).date]);
-    // Query theo status, rồi lọc từng buổi; dự án nhỏ phù hợp cách này.
-    const snapshot = await db.collection('bookings').where('status','==','confirmed').get();
-    const fields = new Map();
-    const tokenCache = new Map();
-    let matched=0, sent=0, skipped=0, errors=0;
-    for(const bookingDoc of snapshot.docs) {
-      const b = bookingDoc.data();
-      if(!isConfirmed(b) || !b.userId) continue;
-      const sessions = Array.isArray(b.selections) && b.selections.length
-        ? b.selections : (b.date ? [b] : []);
-      const excluded = new Set(Array.isArray(b.cancelledSessions) ? b.cancelledSessions : []);
-      for(const s of sessions) {
-        if(!days.has(s.date) || !s.courtId || !s.startTime) continue;
-        if(excluded.has(`${s.date}|${s.courtId}`)) continue;
-        const starts = slotStartMs(s);
-        if(!Number.isFinite(starts) || starts < earliest || starts > latest) continue;
+    const now=Date.now();
+    const earliest=now+40*60*1000;
+    const latest=now+60*60*1000;
+    const days=new Set([vnDateAndTime(earliest).date,vnDateAndTime(latest).date]);
+    const snapshot=await db.collection('bookings').where('status','==','confirmed').get();
+    const fields=new Map();
+    const tokenCache=new Map();
+    let matched=0,sent=0,skipped=0,errors=0,stored=0;
+    for(const bookingDoc of snapshot.docs){
+      const b=bookingDoc.data();
+      if(!isConfirmed(b)||!b.userId)continue;
+      const sessions=Array.isArray(b.selections)&&b.selections.length?b.selections:(b.date?[b]:[]);
+      const excluded=new Set(Array.isArray(b.cancelledSessions)?b.cancelledSessions:[]);
+      for(const s of sessions){
+        if(!days.has(s.date)||!s.courtId||!s.startTime)continue;
+        if(excluded.has(`${s.date}|${s.courtId}`))continue;
+        const starts=slotStartMs(s);
+        if(!Number.isFinite(starts)||starts<earliest||starts>latest)continue;
         matched++;
-        const reminderId = crypto.createHash('sha256')
-          .update(JSON.stringify([bookingDoc.id,s.date,s.courtId,s.startTime]))
-          .digest('hex');
-        const reminderRef = db.collection('booking_reminders').doc(reminderId);
-        // Atomic claim: cron chạy song song không phát trùng.
-        try { await reminderRef.create({
-          bookingId:bookingDoc.id, userId:b.userId, date:s.date, startTime:s.startTime,
-          status:'processing', createdAt:FieldValue.serverTimestamp()
-        }); } catch(e) { if(e.code===6 || e.code==='already-exists') {skipped++;continue;} throw e; }
+        const reminderId=crypto.createHash('sha256')
+          .update(JSON.stringify([bookingDoc.id,s.date,s.courtId,s.startTime])).digest('hex');
+        const reminderRef=db.collection('booking_reminders').doc(reminderId);
         try {
-          if(!tokenCache.has(b.userId)) {
-            const devices = await db.collection('user_push_tokens').doc(b.userId).collection('devices').get();
-            tokenCache.set(b.userId, devices.docs.map(d=>({ref:d.ref,token:d.data().token})).filter(d=>validToken(d.token)));
-          }
-          const candidateDevices = tokenCache.get(b.userId);
-          const devices = [];
-          for(const device of candidateDevices) {
-            const owner=await db.collection('push_token_owners').doc(hashToken(device.token)).get();
-            if(owner.exists && owner.data()?.userId===b.userId) devices.push(device);
-          }
-          if(!devices.length) {
-            await reminderRef.update({status:'no_device'});
-            skipped++; continue;
-          }
-          if(!fields.has(b.fieldId)) {
-            const doc=await db.collection('fields').doc(String(b.fieldId)).get();
-            fields.set(b.fieldId,doc.exists?doc.data().name:'sân đã đặt');
+          await reminderRef.create({bookingId:bookingDoc.id,userId:b.userId,date:s.date,
+            startTime:s.startTime,status:'processing',createdAt:FieldValue.serverTimestamp()});
+        }catch(e){if(e.code===6||e.code==='already-exists'){skipped++;continue;}throw e;}
+        try {
+          if(!fields.has(b.fieldId)){
+            const fieldDoc=await db.collection('fields').doc(String(b.fieldId)).get();
+            fields.set(b.fieldId,fieldDoc.exists?fieldDoc.data().name:'sân đã đặt');
           }
           const venue=fields.get(b.fieldId)||'sân đã đặt';
-          const court = s.courtId.replace(/^court_/, 'Sân ');
-          const message = {
-            notification: {title:'SPORTY · Sắp đến giờ chơi!',body:`Còn khoảng 1 tiếng: ${venue}, ${court}, lúc ${s.startTime} ngày ${s.date}.`},
-            data:{type:'booking_reminder',bookingId:bookingDoc.id,date:s.date,courtId:String(s.courtId)},
-            tokens:devices.map(d=>d.token),
-            android:{priority:'high'},
-          };
-          // Lưu thông báo trong app trước khi gửi FCM. Đánh dấu theo session, không tạo trùng.
+          const court=s.courtId.replace(/^court_/,'Sân ');
+          const title='SPORTY · Sắp đến giờ chơi!';
+          const body=`Còn khoảng 1 tiếng: ${venue}, ${court}, lúc ${s.startTime} ngày ${s.date}.`;
           const inboxRef=db.collection('user_notifications').doc(b.userId).collection('items').doc(reminderId);
-          await inboxRef.set({
-            title:message.notification.title,body:message.notification.body,
-            bookingId:bookingDoc.id,date:s.date,courtId:String(s.courtId),startTime:s.startTime,
-            type:'booking_reminder',read:false,createdAt:FieldValue.serverTimestamp()
-          });
+          await inboxRef.set({title,body,bookingId:bookingDoc.id,date:s.date,courtId:String(s.courtId),
+            startTime:s.startTime,type:'booking_reminder',read:false,createdAt:FieldValue.serverTimestamp()});
+          stored++;
+          if(!tokenCache.has(b.userId)){
+            const devicesSnap=await db.collection('user_push_tokens').doc(b.userId).collection('devices').get();
+            tokenCache.set(b.userId,devicesSnap.docs.map(d=>({ref:d.ref,token:d.data().token})).filter(d=>validToken(d.token)));
+          }
+          const devices=[];
+          for(const device of tokenCache.get(b.userId)){
+            const owner=await db.collection('push_token_owners').doc(hashToken(device.token)).get();
+            if(owner.exists&&owner.data()?.userId===b.userId)devices.push(device);
+          }
+          if(!devices.length){
+            await reminderRef.update({status:'stored_no_device',completedAt:FieldValue.serverTimestamp()});
+            skipped++;continue;
+          }
+          const message={notification:{title,body},data:{type:'booking_reminder',bookingId:bookingDoc.id,
+            date:s.date,courtId:String(s.courtId)},tokens:devices.map(d=>d.token),android:{priority:'high'}};
           const response=await admin.messaging().sendEachForMulticast(message);
           for(let i=0;i<response.responses.length;i++){
             const result=response.responses[i];
-            if (!result.success && /registration-token-not-registered|invalid-registration-token/.test(result.error?.code||'')) {
+            if(!result.success && /registration-token-not-registered|invalid-registration-token/.test(result.error?.code||'')){
               await devices[i].ref.delete().catch(()=>{});
             }
           }
-          await reminderRef.update({status:response.successCount?'sent':'failed',successCount:response.successCount, failureCount:response.failureCount, completedAt:FieldValue.serverTimestamp()});
+          await reminderRef.update({status:response.successCount?'sent':'failed',successCount:response.successCount,
+            failureCount:response.failureCount,completedAt:FieldValue.serverTimestamp()});
           sent+=response.successCount;
           errors+=response.failureCount;
         }catch(e){
@@ -196,10 +162,7 @@ router.get('/internal/send-booking-reminders', async (req,res) => {
         }
       }
     }
-    res.json({success:true,matched,sent,skipped,errors});
-  } catch(e) {
-    console.error('Reminder cron:',e);
-    res.status(500).json({success:false,message:'Không gửi được nhắc lịch.'});
-  }
+    res.json({success:true,matched,sent,skipped,errors,stored});
+  }catch(e){console.error('Reminder cron:',e);res.status(500).json({success:false,message:'Không gửi được nhắc lịch.'});}
 });
 module.exports=router;

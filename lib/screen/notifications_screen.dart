@@ -88,7 +88,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             Center(child:Text('Chưa có thông báo',style:TextStyle(color:purple,fontSize:15,fontWeight:FontWeight.w700))),SizedBox(height:8),
             Center(child:Padding(padding:EdgeInsets.symmetric(horizontal:36),child:Text('Khi có lịch sắp đến giờ chơi, thông báo sẽ xuất hiện tại đây.',textAlign:TextAlign.center,style:TextStyle(color:Color(0xFF77748E),fontSize:12))))])
           :ListView.separated(padding:const EdgeInsets.fromLTRB(16,8,16,24),itemCount:items.length,
-            separatorBuilder:(_,__)=>const SizedBox(height:10),itemBuilder:(ctx,index){
+            separatorBuilder:(_,_)=>const SizedBox(height:10),itemBuilder:(ctx,index){
               final item=items[index];final read=item['read']==true;
               return InkWell(onTap:()=>_markRead(item),borderRadius:BorderRadius.circular(15),child:Container(
                 padding:const EdgeInsets.all(14),decoration:BoxDecoration(color:read?Colors.white:const Color(0xFFF2EDFF),
