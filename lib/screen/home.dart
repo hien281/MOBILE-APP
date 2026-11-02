@@ -15,6 +15,7 @@ import 'map_screen.dart';
 import 'explore.dart';
 import 'notifications_screen.dart';
 import '../notification_badge_service.dart';
+import '../widgets/sporty_profile_avatar.dart';
 
 import 'my_schedule.dart';
 import 'account_screen.dart';
@@ -451,19 +452,17 @@ class _HomeScreenState extends State<HomeScreen> {
     final name = user?.displayName?.trim().isNotEmpty == true
         ? user!.displayName!.trim()
         : (user?.email?.split('@').first ?? 'bạn');
-    final photo = user?.photoURL;
     return Row(
       children: [
         GestureDetector(
           onTap: () => _onNavTap(4),
-          child: CircleAvatar(
+          child: SportyProfileAvatar(
+            user: user,
+            displayName: name,
             radius: 21,
-          backgroundColor: const Color(0xFFEDE7FA),
-          backgroundImage: photo != null && photo.isNotEmpty ? NetworkImage(photo) : null,
-          child: photo == null || photo.isEmpty
-              ? const Icon(Icons.person_rounded, color: oliveGreen, size: 25)
-              : null,
-          ),
+            backgroundColor: const Color(0xFFEDE7FA),
+            foregroundColor: oliveGreen,
+          ),          ),
         ),
         const SizedBox(width: 10),
         Expanded(
