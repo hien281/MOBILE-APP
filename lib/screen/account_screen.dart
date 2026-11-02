@@ -14,6 +14,7 @@ import 'home.dart';
 import 'login.dart';
 import 'notifications_screen.dart';
 import '../notification_badge_service.dart';
+import '../widgets/sporty_profile_avatar.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key, this.isActive = true});
@@ -344,7 +345,6 @@ class _AccountScreenState extends State<AccountScreen> {
     final user = FirebaseAuth.instance.currentUser;
     final displayName = userProfile?['name'] ?? (user?.displayName?.isNotEmpty == true ? user!.displayName! : 'Tài khoản SPORTY');
     final email = userProfile?['email'] ?? (user?.email ?? 'Chưa có email');
-    final initialLetter = (displayName.isNotEmpty ? displayName[0] : 'S').toUpperCase();
 
     // Phân loại thẻ
     final activeCards = cards.where((c) => c is Map && c['status'] == 'active').toList();
@@ -389,13 +389,12 @@ class _AccountScreenState extends State<AccountScreen> {
                 ),
                 child: Row(
                   children: [
-                    CircleAvatar(
+                    SportyProfileAvatar(
+                      user: user,
+                      displayName: displayName.toString(),
                       radius: 28,
                       backgroundColor: Colors.white,
-                      child: Text(
-                        initialLetter,
-                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: primary),
-                      ),
+                      foregroundColor: primary,
                     ),
                     const SizedBox(width: 14),
                     Expanded(
