@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../widgets/sporty_profile_avatar.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -173,7 +174,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         : (user?.displayName?.trim().isNotEmpty == true
             ? user!.displayName!.trim()
             : (user?.email?.split('@').first ?? 'SPORTY User'));
-    final initialLetter = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U';
 
     return Scaffold(
       backgroundColor: background,
@@ -209,13 +209,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       ),
                       child: Row(
                         children: [
-                          CircleAvatar(
+                          SportyProfileAvatar(
+                            user: user,
+                            displayName: displayName,
                             radius: 32,
                             backgroundColor: const Color(0xFFDFDCF9),
-                            child: Text(
-                              initialLetter,
-                              style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: primary),
-                            ),
+                            foregroundColor: primary,
                           ),
                           const SizedBox(width: 14),
                           Expanded(
