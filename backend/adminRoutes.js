@@ -125,9 +125,9 @@ function membershipData(x){
  return d;
 }
 function eventData(x){
- const title=clean(x.title),description=clean(x.description),venue=clean(x.venue),imageUrl=clean(x.imageUrl);
- if(!title||title.length>170||description.length>6000||venue.length>200||!urlOk(imageUrl))return null;
- return {title,description,venue,imageUrl,address:clean(x.address),postTime:clean(x.postTime),tag:clean(x.tag),isActive:x.isActive!==false};
+ const title=clean(x.title),content=clean(x.content??x.description),venue=clean(x.venue),imageUrl=clean(x.imageUrl);
+ if(!title||title.length>170||content.length>6000||venue.length>200||!urlOk(imageUrl))return null;
+ return {title,content,venue,imageUrl,address:clean(x.address),postTime:clean(x.postTime),tag:clean(x.tag),isActive:x.isActive!==false};
 }
 router.get('/admin/memberships',async(req,res)=>{
  try{
