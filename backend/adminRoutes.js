@@ -23,22 +23,37 @@ const mins = t => Number(t.slice(0,2))*60+Number(t.slice(3));
 const jsonDoc = d => ({id:d.id,...d.data()});
 const asDate = value => value?.toDate?.()?.toISOString?.() || value || null;
 
-router.get('/admin/overview', async(req,res)=>{
- try {
-  const [fields,bookings,users] = await Promise.all([
-    db.collection('fields').get(),db.collection('bookings').get(),db.collection('users').get()
-  ]);
-  let totalPaid=0, confirmed=0, sessions=0;
-  const perDay={};
-  const customerIds=new Set();
-  for(const d of bookings.docs){
-   const b=d.data(); if(b.userId)customerIds.add(b.userId);
-   if(b.status==='confirmed'){confirmed++; const ss=Array.isArray(b.selections)&&b.selections.length?b.selections:[b];sessions+=ss.length;
-    for(const s of ss){if(/^\d{4}-\d{2}-\d{2}$/.test(s.date||''))perDay[s.date]=(perDay[s.date]||0)+1;}
+router.get('/admin/overview',async(req,res)=>{
+ try{
+  const [fs,bs,ms,mos]=await Promise.all(['fields','bookings','memberships','membership_orders'].map(c=>db.collection(c).get()));
+  const names=Object.fromEntries(fs.docs.map(x=>[x.id,x.data().name||x.id]));
+  const perDay={},perVenue={},perSport={},customers=new Set();
+  let confirmed=0,sessions=0,paidRevenue=0;
+  for(const doc of bs.docs){
+   const d=doc.data(),fieldId=d.fieldId||'unknown',sport=fs.docs.find(f=>f.id===fieldId)?.data().sport||'Khác';
+   if(d.userId)customers.add(d.userId);
+   const selections=Array.isArray(d.selections)&&d.selections.length?d.selections:[d];
+   if(d.status==='confirmed'){
+    confirmed++;sessions+=selections.length;
+    const row=perVenue[fieldId]??={id:fieldId,name:names[fieldId]||fieldId,bookings:0,revenue:0};
+    row.bookings+=selections.length;
+    perSport[sport]=(perSport[sport]||0)+selections.length;
+    for(const slot of selections)if(/^\d{4}-\d{2}-\d{2}$/.test(slot.date||''))perDay[slot.date]=(perDay[slot.date]||0)+1;
    }
-   if(b.paymentStatus==='paid' && b.bookingType!=='membership')totalPaid+=Number(b.totalPrice)||0;
+   if(d.paymentStatus==='paid'&&d.bookingType!=='membership'){
+    const revenue=Number(d.totalPrice)||0;paidRevenue+=revenue;
+    const row=perVenue[fieldId]??={id:fieldId,name:names[fieldId]||fieldId,bookings:0,revenue:0};row.revenue+=revenue;
+   }
   }
-  res.json({success:true,stats:{fields:fields.size,registeredUsers:users.size,bookingCustomers:customerIds.size,orders:bookings.size,confirmed,sessions,paidRevenue:totalPaid},chart:Object.entries(perDay).sort(([a],[b])=>a.localeCompare(b)).slice(-14).map(([date,count])=>({date,count}))});
+  const mo=mos.docs.map(x=>({id:x.id,...x.data()}));
+  const paidMemberships=mo.filter(x=>x.paymentStatus==='paid');
+  const membershipRevenue=paidMemberships.reduce((n,x)=>n+(Number(x.totalPrice)||0),0);
+  const venue=Object.values(perVenue);
+  res.json({success:true,stats:{bookingCustomers:customers.size,orders:bs.size,confirmed,sessions,fields:fs.size,paidRevenue,membershipOrders:mo.length,membershipPaid:paidMemberships.length,membershipRevenue,membershipPackages:ms.size},
+   chart:Object.entries(perDay).sort(([x],[y])=>x.localeCompare(y)).slice(-14).map(([date,count])=>({date,count})),
+   topRevenue:[...venue].sort((x,y)=>y.revenue-x.revenue).slice(0,10),
+   topBookings:[...venue].sort((x,y)=>y.bookings-x.bookings).slice(0,10),
+   bySport:Object.entries(perSport).map(([name,count])=>({name,count})).sort((x,y)=>y.count-x.count)});
  }catch(e){fail(res,e)}
 });
 router.get('/admin/bookings',async(req,res)=>{
@@ -97,4 +112,55 @@ router.put('/admin/fields/:id',async(req,res)=>{
   await ref.update({...data,updatedAt:FieldValue.serverTimestamp()});res.json({success:true});
  }catch(e){fail(res,e)}
 });
+
+const urlOk=v=>!v||(/^https:\/\//.test(v)&&v.length<=1800);
+const safeId=id=>/^[a-zA-Z0-9_-]{1,150}$/.test(id);
+function membershipData(x){
+ const cardName=clean(x.cardName),venue=clean(x.venue),sport=clean(x.sport),fieldId=clean(x.fieldId);
+ const price=Number(x.price),freeSlots=Number(x.freeSlots),months=Number(x.months);
+ if(!cardName||cardName.length>160||!venue||venue.length>160||!Number.isSafeInteger(price)||price<=0||!Number.isInteger(freeSlots)||freeSlots<0||freeSlots>10000||!Number.isInteger(months)||months<1||months>24)return null;
+ const d={cardName,venue,sport,fieldId,price,freeSlots,duration:months+' Tháng',isActive:x.isActive!==false,
+  description:clean(x.description),benefits:clean(x.benefits),policy:clean(x.policy),applyTime:clean(x.applyTime),openSale:clean(x.openSale),address:clean(x.address),imageUrl:clean(x.imageUrl),logoUrl:clean(x.logoUrl)};
+ if(!urlOk(d.imageUrl)||!urlOk(d.logoUrl)||[d.description,d.benefits,d.policy].some(v=>v.length>3500))return null;
+ return d;
+}
+function eventData(x){
+ const title=clean(x.title),description=clean(x.description),venue=clean(x.venue),imageUrl=clean(x.imageUrl);
+ if(!title||title.length>170||description.length>6000||venue.length>200||!urlOk(imageUrl))return null;
+ return {title,description,venue,imageUrl,address:clean(x.address),postTime:clean(x.postTime),tag:clean(x.tag),isActive:x.isActive!==false};
+}
+router.get('/admin/memberships',async(req,res)=>{
+ try{
+  const [plans,orders]=await Promise.all([db.collection('memberships').get(),db.collection('membership_orders').get()]);
+  const counts={};
+  for(const d of orders.docs){const x=d.data(),id=x.membershipId;if(!id)continue;const s=counts[id]??={orders:0,paid:0,revenue:0};s.orders++;if(x.paymentStatus==='paid'){s.paid++;s.revenue+=Number(x.totalPrice)||0}}
+  res.json({success:true,packages:plans.docs.map(d=>({...jsonDoc(d),sales:counts[d.id]||{orders:0,paid:0,revenue:0}})),recentOrders:orders.docs.map(jsonDoc).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))).slice(0,100)});
+ }catch(e){fail(res,e)}
+});
+router.post('/admin/memberships',async(req,res)=>{
+ try{const d=membershipData(req.body||{});if(!d)return res.status(400).json({success:false,message:'Thông tin gói không hợp lệ.'});
+ const ref=await db.collection('memberships').add({...d,createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});res.status(201).json({success:true,id:ref.id});
+ }catch(e){fail(res,e)}
+});
+router.put('/admin/memberships/:id',async(req,res)=>{
+ try{if(!safeId(req.params.id))return res.status(400).json({success:false,message:'Mã không hợp lệ.'});
+ const ref=db.collection('memberships').doc(req.params.id),snap=await ref.get();if(!snap.exists)return res.status(404).json({success:false,message:'Không tìm thấy gói.'});
+ const d=membershipData(req.body||{});if(!d)return res.status(400).json({success:false,message:'Thông tin không hợp lệ.'});
+ await ref.update({...d,updatedAt:FieldValue.serverTimestamp()});res.json({success:true});
+ }catch(e){fail(res,e)}
+});
+router.get('/admin/events',async(req,res)=>{
+ try{const snap=await db.collection('event').get();res.json({success:true,events:snap.docs.map(jsonDoc)});}catch(e){fail(res,e)}
+});
+router.post('/admin/events',async(req,res)=>{
+ try{const d=eventData(req.body||{});if(!d)return res.status(400).json({success:false,message:'Nội dung chưa hợp lệ.'});
+ const ref=await db.collection('event').add({...d,createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});res.status(201).json({success:true,id:ref.id});}catch(e){fail(res,e)}
+});
+router.put('/admin/events/:id',async(req,res)=>{
+ try{if(!safeId(req.params.id))return res.status(400).json({success:false,message:'Mã không hợp lệ.'});
+ const ref=db.collection('event').doc(req.params.id);if(!(await ref.get()).exists)return res.status(404).json({success:false,message:'Không tìm thấy tin.'});
+ const d=eventData(req.body||{});if(!d)return res.status(400).json({success:false,message:'Thông tin chưa hợp lệ.'});
+ await ref.update({...d,updatedAt:FieldValue.serverTimestamp()});res.json({success:true});}catch(e){fail(res,e)}
+});
+
 module.exports=router;
