@@ -462,7 +462,7 @@ class _HomeScreenState extends State<HomeScreen> {
             radius: 21,
             backgroundColor: const Color(0xFFEDE7FA),
             foregroundColor: oliveGreen,
-          ),          ),
+          ),
         ),
         const SizedBox(width: 10),
         Expanded(
