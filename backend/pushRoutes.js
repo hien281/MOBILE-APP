@@ -1,6 +1,6 @@
 const express = require('express');
 const crypto = require('crypto');
-const admin = require('firebase-admin');
+const { getMessaging } = require('firebase-admin/messaging');
 const { FieldValue } = require('firebase-admin/firestore');
 const { db } = require('./firebase');
 const { requireAuth } = require('./authMiddleware');
@@ -144,7 +144,7 @@ router.get('/internal/send-booking-reminders',async(req,res)=>{
           }
           const message={notification:{title,body},data:{type:'booking_reminder',bookingId:bookingDoc.id,
             date:s.date,courtId:String(s.courtId)},tokens:devices.map(d=>d.token),android:{priority:'high'}};
-          const response=await admin.messaging().sendEachForMulticast(message);
+          const response=await getMessaging().sendEachForMulticast(message);
           for(let i=0;i<response.responses.length;i++){
             const result=response.responses[i];
             if(!result.success && /registration-token-not-registered|invalid-registration-token/.test(result.error?.code||'')){
