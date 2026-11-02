@@ -100,6 +100,24 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
       final list=(data['bookings'] as List? ?? []).whereType<Map>().map((e)=>Map<String,dynamic>.from(e)).toList();
       if (!mounted) return;
       setState(() {bookings=list;error=null;});
+      final ids=list.map((b)=>b['fieldId']?.toString()??'').where((id)=>id.isNotEmpty && !fieldNames.containsKey(id)).toSet();
+      if (ids.isNotEmpty) {
+        final entries=await Future.wait(ids.map((id) async {
+          try {
+            final response=await http.get(Uri.parse('${ApiClient.baseUrl}/fields/${Uri.encodeComponent(id)}')).timeout(const Duration(seconds:8));
+            final d=jsonDecode(utf8.decode(response.bodyBytes));
+            if(response.statusCode==200 && d is Map && d['field'] is Map) {
+              final field=d['field'] as Map;
+              fieldSports[id]=(field['sportType']??field['sport']??field['category']??'').toString();
+              final img=(field['imageUrl']??(field['images'] is List && (field['images'] as List).isNotEmpty?(field['images'] as List).first:null))?.toString();
+              if(img!=null && img.startsWith('http')) fieldImages[id]=img;
+              return MapEntry(id,(field['name']??id).toString());
+            }
+          } catch (_) {}
+          return MapEntry(id,id);
+        }));
+        if(mounted) setState(()=>fieldNames.addEntries(entries));
+      }
       if (!_initialBookingOpened && widget.initialBookingId != null) {
         final matched = list.where((b) => b['id']?.toString() == widget.initialBookingId).toList();
         if (matched.isNotEmpty) {
@@ -119,24 +137,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
           });
         }
       }
-      final ids=list.map((b)=>b['fieldId']?.toString()??'').where((id)=>id.isNotEmpty && !fieldNames.containsKey(id)).toSet();
-      if (ids.isNotEmpty) {
-        final entries=await Future.wait(ids.map((id) async {
-          try {
-            final response=await http.get(Uri.parse('${ApiClient.baseUrl}/fields/${Uri.encodeComponent(id)}')).timeout(const Duration(seconds:8));
-            final d=jsonDecode(utf8.decode(response.bodyBytes));
-            if(response.statusCode==200 && d is Map && d['field'] is Map) {
-              final field=d['field'] as Map;
-              fieldSports[id]=(field['sportType']??field['sport']??field['category']??'').toString();
-              final img=(field['imageUrl']??(field['images'] is List && (field['images'] as List).isNotEmpty?(field['images'] as List).first:null))?.toString();
-              if(img!=null && img.startsWith('http')) fieldImages[id]=img;
-              return MapEntry(id,(field['name']??id).toString());
-            }
-          } catch (_) {}
-          return MapEntry(id,id);
-        }));
-        if(mounted) setState(()=>fieldNames.addEntries(entries));
-      }
+
     } catch(e) {
       if(mounted) setState(()=>error=e.toString().replaceFirst('Exception: ',''));
     } finally {
