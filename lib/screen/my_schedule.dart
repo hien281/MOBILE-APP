@@ -12,9 +12,32 @@ const _green = Color(0xFF176A43);
 const _red = Color(0xFFB42332);
 const _grey = Color(0xFF667085);
 
+// SPORTY_SPORT_ICONS_V1 - Anh xa icon theo yeu cau giao dien.
+String _sportDisplayName(String raw) {
+  final v = raw.trim().toLowerCase();
+  if (v.contains('pickle')) return 'Pickleball';
+  if (v.contains('cầu lông') || v.contains('cau long') || v.contains('badminton')) return 'Cầu lông';
+  if (v.contains('bóng đá') || v.contains('bong da') || v.contains('football') || v.contains('soccer')) return 'Bóng đá';
+  if (v.contains('tennis') || v.contains('quần vợt') || v.contains('quan vot')) return 'Tennis';
+  return raw.trim();
+}
+IconData _sportDisplayIcon(String raw) {
+  switch (_sportDisplayName(raw)) {
+    case 'Bóng đá': return Icons.sports_soccer;
+    case 'Cầu lông': return Icons.sports_tennis;
+    case 'Tennis': return Icons.sports_baseball;
+    case 'Pickleball': return Icons.sports_cricket;
+    default: return Icons.sports_outlined;
+  }
+}
+
 class MyScheduleScreen extends StatefulWidget {
   final bool isActive;
-  const MyScheduleScreen({super.key, this.isActive = true});
+  final String? initialBookingId;
+  final String? initialDate;
+  final String? initialCourtId;
+  const MyScheduleScreen({super.key, this.isActive = true,
+    this.initialBookingId, this.initialDate, this.initialCourtId});
   @override
   State<MyScheduleScreen> createState() => _MyScheduleScreenState();
 }
@@ -27,7 +50,9 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
   List<Map<String,dynamic>> bookings = [];
   Map<String,String> fieldNames = {};
   Map<String,String> fieldImages = {};
+  Map<String,String> fieldSports = {};
   int tab = 0;
+  bool _initialBookingOpened = false;
 
   @override
   void initState() {
@@ -75,6 +100,25 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
       final list=(data['bookings'] as List? ?? []).whereType<Map>().map((e)=>Map<String,dynamic>.from(e)).toList();
       if (!mounted) return;
       setState(() {bookings=list;error=null;});
+      if (!_initialBookingOpened && widget.initialBookingId != null) {
+        final matched = list.where((b) => b['id']?.toString() == widget.initialBookingId).toList();
+        if (matched.isNotEmpty) {
+          final sessions = _sessions(matched.first);
+          Map<String,dynamic> chosen = sessions.first;
+          for (final session in sessions) {
+            final parts = (session['sessionKey'] ?? '').toString().split('|');
+            if (parts.length >= 2 &&
+                parts[0] == widget.initialDate && parts[1] == widget.initialCourtId) {
+              chosen = session;
+              break;
+            }
+          }
+          _initialBookingOpened = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _details(chosen);
+          });
+        }
+      }
       final ids=list.map((b)=>b['fieldId']?.toString()??'').where((id)=>id.isNotEmpty && !fieldNames.containsKey(id)).toSet();
       if (ids.isNotEmpty) {
         final entries=await Future.wait(ids.map((id) async {
@@ -83,6 +127,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
             final d=jsonDecode(utf8.decode(response.bodyBytes));
             if(response.statusCode==200 && d is Map && d['field'] is Map) {
               final field=d['field'] as Map;
+              fieldSports[id]=(field['sportType']??field['sport']??field['category']??'').toString();
               final img=(field['imageUrl']??(field['images'] is List && (field['images'] as List).isNotEmpty?(field['images'] as List).first:null))?.toString();
               if(img!=null && img.startsWith('http')) fieldImages[id]=img;
               return MapEntry(id,(field['name']??id).toString());
@@ -351,6 +396,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
         builder: (detailContext, booking, _) => _BookingDetailPage(
           booking: booking,
           venueName: fieldNames[booking['fieldId']] ?? booking['fieldId']?.toString() ?? 'Sân',
+           sportType: fieldSports[booking['fieldId']] ?? booking['sportType']?.toString() ?? '',
           imageUrl: fieldImages[booking['fieldId']],
           selections: _selections(booking),
           statusLabel: _status(booking),
@@ -427,6 +473,14 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
             const SizedBox(height:4),
             Text('${first['date']??'-'} • ${first['startTime']??'-'}–${first['endTime']??'-'}',style:const TextStyle(fontSize:11,color:Colors.black87)),
             const SizedBox(height:5),
+            if ((fieldSports[id] ?? b['sportType']?.toString() ?? '').trim().isNotEmpty) ...[
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(_sportDisplayIcon(fieldSports[id] ?? b['sportType']?.toString() ?? ''), size: 13, color: _purple),
+                const SizedBox(width: 4),
+                Flexible(child: Text(_sportDisplayName(fieldSports[id] ?? b['sportType']?.toString() ?? ''), style: const TextStyle(fontSize: 11, color: Colors.black54))),
+              ]),
+              const SizedBox(height: 4),
+            ],
             Text('Sân ${(first['courtId']??'1').toString().replaceFirst('court_','')}${selections.length>1?' • ${selections.length} khung giờ':''}',style:const TextStyle(fontSize:11,color:Colors.black54)),
             const SizedBox(height:5),
             Container(padding:const EdgeInsets.symmetric(horizontal:8,vertical:3),decoration:BoxDecoration(color:member?const Color(0xFFFFF0BC):const Color(0xFFECE4FF),borderRadius:BorderRadius.circular(9)),child:Text(member?'Hội viên':'Đặt thường',style:TextStyle(fontSize:10,fontWeight:FontWeight.w700,color:_purple))),
@@ -583,6 +637,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
 class _BookingDetailPage extends StatelessWidget {
   final Map<String, dynamic> booking;
   final String venueName;
+  final String sportType;
   final String? imageUrl;
   final List<Map<String, dynamic>> selections;
   final String statusLabel;
@@ -591,7 +646,7 @@ class _BookingDetailPage extends StatelessWidget {
   final Future<void> Function() onPay, onCancel, onRefundRequest;
 
   const _BookingDetailPage({
-    required this.booking, required this.venueName, required this.imageUrl,
+    required this.booking, required this.venueName, required this.sportType, required this.imageUrl,
     required this.selections, required this.statusLabel, required this.canPay,
     required this.canCancel, required this.remainingLabel,
     required this.onPay, required this.onCancel, required this.onRefundRequest,
@@ -705,7 +760,8 @@ class _BookingDetailPage extends StatelessWidget {
             Wrap(spacing: 6, runSpacing: 6, children: [
               _heroInfo(Icons.calendar_today_outlined, first['date']?.toString() ?? '-'),
               _heroInfo(Icons.access_time_rounded, '${first['startTime'] ?? '-'}–${first['endTime'] ?? '-'}'),
-              _heroInfo(Icons.sports_tennis, 'Sân ${(first['courtId'] ?? 'court_1').toString().replaceFirst('court_', '')}'),
+              _heroInfo(Icons.grid_view_rounded, 'Sân ${(first['courtId'] ?? 'court_1').toString().replaceFirst('court_', '')}'),
+              if (sportType.trim().isNotEmpty) _heroInfo(_sportDisplayIcon(sportType), _sportDisplayName(sportType)),
             ]),
           ]),
         ),

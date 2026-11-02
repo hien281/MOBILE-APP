@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../api_client.dart';
+import '../notification_badge_service.dart';
+import 'my_schedule.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -36,6 +38,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       }
       if(!mounted)return;
       setState(()=>items=(obj['notifications'] as List).whereType<Map>().map((e)=>Map<String,dynamic>.from(e)).toList());
+      SportyNotificationBadge.instance.unread.value = items.where((e) => e['read'] != true).length;
     }catch(e){if(mounted)setState(()=>error=e.toString().replaceFirst('Exception: ',''));}
     finally{if(mounted)setState(()=>loading=false);}
   }
@@ -48,6 +51,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         headers:{'Authorization':'Bearer $token'}).timeout(const Duration(seconds:12));
       if(response.statusCode!=200)throw Exception('Không cập nhật được thông báo');
       if(mounted)setState(()=>item['read']=true);
+      SportyNotificationBadge.instance.refresh();
     }catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('$e')));}
   }
   Future<void> _readAll() async {
@@ -90,7 +94,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           :ListView.separated(padding:const EdgeInsets.fromLTRB(16,8,16,24),itemCount:items.length,
             separatorBuilder:(_,_)=>const SizedBox(height:10),itemBuilder:(ctx,index){
               final item=items[index];final read=item['read']==true;
-              return InkWell(onTap:()=>_markRead(item),borderRadius:BorderRadius.circular(15),child:Container(
+              return InkWell(onTap:() async {
+                  await _markRead(item);
+                  if (!mounted) return;
+                  final bookingId = item['bookingId']?.toString();
+                  if (bookingId == null || bookingId.isEmpty) return;
+                  await Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => MyScheduleScreen(
+                      initialBookingId: bookingId,
+                      initialDate: item['date']?.toString(),
+                      initialCourtId: item['courtId']?.toString(),
+                    ),
+                  ));
+                },borderRadius:BorderRadius.circular(15),child:Container(
                 padding:const EdgeInsets.all(14),decoration:BoxDecoration(color:read?Colors.white:const Color(0xFFF2EDFF),
                   borderRadius:BorderRadius.circular(15),border:Border.all(color:read?const Color(0xFFE7E2F0):const Color(0xFFD2C3FF))),
                 child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[

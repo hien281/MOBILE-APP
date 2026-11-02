@@ -588,7 +588,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildSearchResultsSection(List<SportsField> fields) {
-    const colorYellow = Color(0xFFFFFC31); // Màu vàng chuẩn của app
+    const colorYellow = Color.fromARGB(255, 255, 238, 130); // Vàng dịu theo thiết kế
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

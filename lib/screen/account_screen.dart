@@ -13,6 +13,7 @@ import 'help_center_screen.dart';
 import 'home.dart';
 import 'login.dart';
 import 'notifications_screen.dart';
+import '../notification_badge_service.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key, this.isActive = true});
@@ -47,6 +48,7 @@ class _AccountScreenState extends State<AccountScreen> {
     refresh();
     _loadUserProfile();
     _startPolling();
+    SportyNotificationBadge.instance.start();
   }
 
   void _startPolling() {
@@ -605,13 +607,15 @@ class _AccountScreenState extends State<AccountScreen> {
                     _buildMenuTile(
                       icon: Icons.notifications_none_rounded,
                       title: 'Thông báo',
-                      onTap: () {
-                        Navigator.push(
+                      notificationBadge: true,
+                      onTap: () async {
+                        await Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (_) => const NotificationsScreen(),
                           ),
                         );
+                        SportyNotificationBadge.instance.refresh();
                       },
                     ),
                     const Divider(height: 1, indent: 54, color: Color(0xFFF0F1F8)),
@@ -1162,6 +1166,7 @@ class _AccountScreenState extends State<AccountScreen> {
     required IconData icon,
     required String title,
     String? subtitle,
+    bool notificationBadge = false,
     required VoidCallback onTap,
   }) {
     return ListTile(
@@ -1179,7 +1184,21 @@ class _AccountScreenState extends State<AccountScreen> {
       subtitle: subtitle != null
           ? Text(subtitle, style: const TextStyle(fontSize: 9, color: Color(0xFF77748E)))
           : null,
-      trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 13, color: Color(0xFFA09EB0)),
+      trailing: notificationBadge ? ValueListenableBuilder<int>(
+        valueListenable: SportyNotificationBadge.instance.unread,
+        builder: (_, count, __) => Row(mainAxisSize: MainAxisSize.min, children: [
+          if (count > 0) Container(
+            constraints: const BoxConstraints(minWidth: 19, minHeight: 19),
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(color: Color(0xFFE53935), borderRadius: BorderRadius.all(Radius.circular(12))),
+            child: Text(count > 99 ? '99+' : '$count',
+              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+          ),
+          if (count > 0) const SizedBox(width: 10),
+          const Icon(Icons.arrow_forward_ios_rounded, size: 13, color: Color(0xFFA09EB0)),
+        ]),
+      ) : const Icon(Icons.arrow_forward_ios_rounded, size: 13, color: Color(0xFFA09EB0)),
     );
   }
 }

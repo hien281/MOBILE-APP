@@ -14,6 +14,7 @@ import 'search.dart';
 import 'map_screen.dart';
 import 'explore.dart';
 import 'notifications_screen.dart';
+import '../notification_badge_service.dart';
 
 import 'my_schedule.dart';
 import 'account_screen.dart';
@@ -164,6 +165,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadFields();
     _loadLocation();
     _loadFavorites();
+    SportyNotificationBadge.instance.start();
     _bannerTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (!mounted || !_bannerController.hasClients) return;
       final next = (_bannerIndex + 1) % _bannerData.length;
@@ -492,9 +494,26 @@ class _HomeScreenState extends State<HomeScreen> {
         const SizedBox(width: 6),
         IconButton(
           tooltip: 'Thông báo',
-          onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotificationsScreen())),
+          onPressed: () async {
+            await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotificationsScreen()));
+            SportyNotificationBadge.instance.refresh();
+          },
           style: IconButton.styleFrom(backgroundColor: const Color(0xFFF7F6FB), fixedSize: const Size(40, 40)),
-          icon: const Icon(Icons.notifications_none_rounded, color: oliveGreen, size: 22),
+          icon: ValueListenableBuilder<int>(
+            valueListenable: SportyNotificationBadge.instance.unread,
+            builder: (_, count, __) => Stack(clipBehavior: Clip.none, children: [
+              const Icon(Icons.notifications_none_rounded, color: oliveGreen, size: 22),
+              if (count > 0) Positioned(right: -9, top: -8,
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(color: Color(0xFFE53935), shape: BoxShape.circle),
+                  child: Text(count > 99 ? '99+' : '$count',
+                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
+                )),
+            ]),
+          ),
         ),
       ],
     );
