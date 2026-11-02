@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../sporty_social_auth.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -95,35 +96,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _socialRegister(AuthProvider provider) async {
     if (_loading) return;
-
-    if (!kIsWeb) {
-      _message(
-        'Đăng ký Google/Facebook hiện chỉ hỗ trợ trên Web.',
-      );
-      return;
-    }
-
     setState(() => _loading = true);
 
     try {
-      await FirebaseAuth.instance.setPersistence(
-        Persistence.LOCAL,
-      );
+      if (kIsWeb) {
+        await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+      }
+      // Firebase Auth tu dong tao tai khoan vao lan dang nhap dau tien.
+      // Cung dung luong Google/Facebook native Android nhu trang Dang nhap.
+      await SportySocialAuth.signIn(provider);
 
-      await FirebaseAuth.instance.signInWithPopup(provider);
-
-      if (mounted && Navigator.canPop(context)) {
-        Navigator.pop(context);
+      if (!mounted) return;
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
       }
     } on FirebaseAuthException catch (error) {
       if (error.code != 'popup-closed-by-user' &&
           error.code != 'cancelled-popup-request') {
-        _message(
-          error.message ?? 'Không thể đăng ký bằng tài khoản này.',
-        );
+        _message(error.message ?? 'Khong the dang ky bang tai khoan nay.');
       }
-    } catch (_) {
-      _message('Không thể đăng ký. Vui lòng thử lại.');
+    } catch (error) {
+      _message('Khong the dang ky Google/Facebook: $error');
     } finally {
       if (mounted) setState(() => _loading = false);
     }

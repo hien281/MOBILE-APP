@@ -107,50 +107,141 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _forgotPassword() async {
-    final controller = TextEditingController(
-      text: _email.text.trim(),
-    );
+    final controller = TextEditingController(text: _email.text.trim());
+    const dialogPurple = Color(0xFF1E147B);
 
     final email = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Quên mật khẩu'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Nhập email để nhận liên kết đặt lại mật khẩu.',
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'Email',
-              ),
-            ),
-          ],
+      barrierDismissible: true,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.white,
+        elevation: 6,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 36),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Hủy'),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 32),
+                    child: Text(
+                      'Quên mật khẩu',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: dialogPurple,
+                      ),
+                    ),
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () => Navigator.pop(dialogContext),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Color(0xFFF0F1F8),
+                        ),
+                        child: const Icon(
+                          Icons.close_rounded,
+                          size: 15,
+                          color: Color(0xFF77748E),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Nhập email để nhận liên kết đặt lại mật khẩu.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11,
+                  height: 1.45,
+                  color: Color(0xFF555566),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                autofocus: false,
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.done,
+                style: const TextStyle(fontSize: 12, color: Color(0xFF29263B)),
+                decoration: InputDecoration(
+                  hintText: 'Email của bạn',
+                  hintStyle: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF9996A6),
+                  ),
+                  prefixIcon: const Icon(
+                    Icons.mail_outline_rounded,
+                    size: 18,
+                    color: dialogPurple,
+                  ),
+                  filled: true,
+                  fillColor: const Color(0xFFF5F5F8),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 12,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(
+                      color: dialogPurple,
+                      width: 1.2,
+                    ),
+                  ),
+                ),
+                onSubmitted: (value) =>
+                    Navigator.pop(dialogContext, value.trim()),
+              ),
+              const SizedBox(height: 18),
+              SizedBox(
+                width: double.infinity,
+                height: 40,
+                child: FilledButton(
+                  onPressed: () =>
+                      Navigator.pop(dialogContext, controller.text.trim()),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: dialogPurple,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'Gửi email',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(
-                dialogContext,
-                controller.text.trim(),
-              );
-            },
-            child: const Text('Gửi email'),
-          ),
-        ],
+        ),
       ),
     );
 
     controller.dispose();
-
     if (email == null || email.isEmpty) return;
 
     if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)) {
@@ -159,13 +250,8 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     try {
-      await FirebaseAuth.instance.sendPasswordResetEmail(
-        email: email,
-      );
-
-      _message(
-        'Nếu email có tài khoản, hãy kiểm tra hộp thư để đặt lại mật khẩu.',
-      );
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      _message('Nếu email có tài khoản, hãy kiểm tra hộp thư để đặt lại mật khẩu.');
     } catch (error) {
       _message(_errorMessage(error));
     }
