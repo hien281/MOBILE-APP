@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const {db} = require('./firebase');
 const app=express();
 app.use(cors());
@@ -22,6 +23,9 @@ const membershipBookingRoutes=require('./membershipBookingRoutes');
 app.use('/api',membershipBookingRoutes);
 const pushRoutes=require('./pushRoutes');
 app.use('/api',pushRoutes);
+const adminRoutes=require('./adminRoutes');
+app.use('/api',adminRoutes);
+app.get(['/admin','/api/admin-ui'],(req,res)=>res.sendFile(path.join(__dirname,'admin_public','index.html')));
 
 app.get('/api/firebase-health',async(req,res)=>{
   try{
