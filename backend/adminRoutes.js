@@ -53,16 +53,31 @@ router.get('/admin/fields',async(req,res)=>{
 });
 function validInput(body){
  const name=clean(body.name), address=clean(body.address), sport=clean(body.sport);
- const openingTime=clean(body.openingTime),closingTime=clean(body.closingTime);
- const price=Number(body.price),courtCount=Number(body.courtCount);
+ const openingTime=clean(body.openingTime), closingTime=clean(body.closingTime);
+ const price=Number(body.price), courtCount=Number(body.courtCount);
+ const rating=body.rating===''||body.rating==null?0:Number(body.rating);
+ const latitude=body.latitude===''||body.latitude==null?null:Number(body.latitude);
+ const longitude=body.longitude===''||body.longitude==null?null:Number(body.longitude);
+ const imageUrl=clean(body.imageUrl), phone=clean(body.phone), googleMapsUrl=clean(body.googleMapsUrl);
+ const isPopular=body.isPopular===true||body.isPopular==='true';
+ const isActive=body.isActive!==false&&body.isActive!=='false';
+ const facilities=Array.isArray(body.facilities)?body.facilities.map(clean).filter(Boolean):[];
+ const images=Array.isArray(body.images)?body.images.map(clean).filter(Boolean):[];
+ const webURL=value=>{if(!value)return true;try{const u=new URL(value);return u.protocol==='https:'&&u.hostname.length>0;}catch(_){return false;}};
  if(!name||name.length>150||!address||address.length>350||!['Bóng đá','Cầu lông','Tennis','Pickleball'].includes(sport))return null;
  if(!timeOK(openingTime)||!timeOK(closingTime)||mins(openingTime)>=mins(closingTime))return null;
  if(!Number.isSafeInteger(price)||price<0||price>100000000||!Number.isInteger(courtCount)||courtCount<1||courtCount>100)return null;
- return {name,address,sport,openingTime,closingTime,price,courtCount};
+ if(!Number.isFinite(rating)||rating<0||rating>5)return null;
+ if(latitude!==null&&(!Number.isFinite(latitude)||latitude< -90||latitude>90))return null;
+ if(longitude!==null&&(!Number.isFinite(longitude)||longitude< -180||longitude>180))return null;
+ if(!webURL(imageUrl)||!webURL(googleMapsUrl)||images.length>12||images.some(x=>!webURL(x)))return null;
+ if(imageUrl.length>1500||phone.length>40||googleMapsUrl.length>1500||facilities.length>30||facilities.some(x=>x.length>90))return null;
+ return {name,address,sport,openingTime,closingTime,price,courtCount,rating,imageUrl,
+   latitude,longitude,phone,googleMapsUrl,isPopular,isActive,facilities,images};
 }
 router.post('/admin/fields',async(req,res)=>{
  try {const data=validInput(req.body||{});if(!data)return res.status(400).json({success:false,message:'Thông tin sân chưa hợp lệ.'});
-  const ref=await db.collection('fields').add({...data,isActive:true,createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});
+  const ref=await db.collection('fields').add({...data,createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});
   res.status(201).json({success:true,id:ref.id});
  }catch(e){fail(res,e)}
 });
