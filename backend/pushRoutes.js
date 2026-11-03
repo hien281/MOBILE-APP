@@ -85,6 +85,43 @@ router.post('/notifications/read-all',requireAuth,async(req,res)=>{
   }catch(error){console.error('Read all:',error);res.status(500).json({success:false});}
 });
 
+// Remove notifications only from the signed-in user's own inbox.
+router.delete('/notifications/:id',requireAuth,async(req,res)=>{
+  try {
+    const id=req.params.id;
+    if(!/^[a-f0-9]{64}$/.test(id))return res.status(400).json({success:false,message:'Mã thông báo không hợp lệ.'});
+    const ref=db.collection('user_notifications').doc(req.user.id).collection('items').doc(id);
+    const snap=await ref.get();
+    if(!snap.exists)return res.status(404).json({success:false,message:'Thông báo đã được xoá.'});
+    await ref.delete();
+    res.json({success:true,deleted:1});
+  }catch(error){
+    console.error('Delete notification:',error);
+    res.status(500).json({success:false,message:'Không xoá được thông báo.'});
+  }
+});
+
+// Paginate deletes so it works beyond Firestore's per-batch write limit.
+router.delete('/notifications',requireAuth,async(req,res)=>{
+  try {
+    const collection=db.collection('user_notifications').doc(req.user.id).collection('items');
+    let deleted=0;
+    while(true){
+      const snapshot=await collection.limit(400).get();
+      if(snapshot.empty)break;
+      const batch=db.batch();
+      snapshot.docs.forEach(d=>batch.delete(d.ref));
+      await batch.commit();
+      deleted+=snapshot.size;
+      if(snapshot.size<400)break;
+    }
+    res.json({success:true,deleted});
+  }catch(error){
+    console.error('Delete all notifications:',error);
+    res.status(500).json({success:false,message:'Không xoá được tất cả thông báo. Hãy thử lại.'});
+  }
+});
+
 // Scheduler should call this every 5 minutes. Covers short delays, but does not promise exact-minute delivery.
 router.get('/internal/send-booking-reminders',async(req,res)=>{
   const secret=process.env.CRON_SECRET;
