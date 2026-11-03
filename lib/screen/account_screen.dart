@@ -1186,13 +1186,25 @@ class _AccountScreenState extends State<AccountScreen> {
       trailing: notificationBadge ? ValueListenableBuilder<int>(
         valueListenable: SportyNotificationBadge.instance.unread,
         builder: (_, count, __) => Row(mainAxisSize: MainAxisSize.min, children: [
-          if (count > 0) Container(
-            constraints: const BoxConstraints(minWidth: 19, minHeight: 19),
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(color: Color(0xFFE53935), borderRadius: BorderRadius.all(Radius.circular(12))),
-            child: Text(count > 99 ? '99+' : '$count',
-              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+          if (count > 0) SizedBox(
+            width: count > 99 ? 32 : 20,
+            height: 20,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: const Color(0xFFE53935),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Center(
+                child: Text(
+                  count > 99 ? '99+' : '$count',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
           ),
           if (count > 0) const SizedBox(width: 10),
           const Icon(Icons.arrow_forward_ios_rounded, size: 13, color: Color(0xFFA09EB0)),
